@@ -1,132 +1,658 @@
-import streamlit as st
+import io
+import os
 import pandas as pd
-from datetime import datetime
+from datetime import datetime, timedelta
+import streamlit as st
+from PIL import Image, ImageDraw, ImageFont
+
+# PDF 생성을 위한 ReportLab 모듈
 from reportlab.lib.pagesizes import A4
-from reportlab.pdfgen import canvas
+from reportlab.lib import colors
+from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Table, TableStyle
+from reportlab.lib.styles import ParagraphStyle
 from reportlab.pdfbase import pdfmetrics
 from reportlab.pdfbase.ttfonts import TTFont
-import os
 
+# 페이지 기본 설정
 st.set_page_config(
-    page_title="화천기공 업무 지원 시스템",
-    page_icon="⚙️",
+    page_title="화천기공 해외출장비 자동 산정 및 정산 프로그램",
     layout="wide"
 )
 
-# 폰트 등록 (malgun.ttf가 같은 경로에 있다고 가정)
-font_path = "malgun.ttf"
-if os.path.exists(font_path):
-    pdfmetrics.registerFont(TTFont('Malgun', font_path))
-    DEFAULT_FONT = 'Malgun'
-else:
-    DEFAULT_FONT = 'Helvetica'
+# 출장비 기준 규정 테이블
+RULES_TABLE = {
+    ("갑", "임원(부사장이상)"): {"daily": 135, "hotel": -1, "curr": "USD"},
+    ("갑", "임원"): {"daily": 90, "hotel": 130, "curr": "USD"},
+    ("갑", "1급"): {"daily": 70, "hotel": 100, "curr": "USD"},
+    ("갑", "2급"): {"daily": 65, "hotel": 95, "curr": "USD"},
+    ("갑", "3급이하"): {"daily": 60, "hotel": 90, "curr": "USD"},
 
-st.title("⚙️ 화천기공 인사·총무 업무 지원 시스템")
-st.markdown("---")
+    ("을", "임원(부사장이상)"): {"daily": 130, "hotel": -1, "curr": "USD"},
+    ("을", "임원"): {"daily": 85, "hotel": 125, "curr": "USD"},
+    ("을", "1급"): {"daily": 65, "hotel": 95, "curr": "USD"},
+    ("을", "2급"): {"daily": 60, "hotel": 90, "curr": "USD"},
+    ("을", "3급이하"): {"daily": 55, "hotel": 85, "curr": "USD"},
+
+    ("병", "임원(부사장이상)"): {"daily": 130, "hotel": -1, "curr": "USD"},
+    ("병", "임원"): {"daily": 80, "hotel": 110, "curr": "USD"},
+    ("병", "1급"): {"daily": 60, "hotel": 90, "curr": "USD"},
+    ("병", "2급"): {"daily": 55, "hotel": 85, "curr": "USD"},
+    ("병", "3급이하"): {"daily": 55, "hotel": 80, "curr": "USD"},
+
+    ("특", "임원(부사장이상)"): {"daily": 23000, "hotel": -1, "curr": "JPY"},
+    ("특", "임원"): {"daily": 11000, "hotel": 17000, "curr": "JPY"},
+    ("특", "1급"): {"daily": 8000, "hotel": 12000, "curr": "JPY"},
+    ("특", "2급"): {"daily": 7000, "hotel": 11000, "curr": "JPY"},
+    ("특", "3급이하"): {"daily": 7000, "hotel": 10000, "curr": "JPY"},
+}
 
 # 세션 상태 초기화
-if 'data_log' not in st.session_state:
-    st.session_state.data_log = []
+if "df_input" not in st.session_state:
+    st.session_state.df_input = pd.DataFrame(columns=[
+        "부서", "성명", "출장지", "지역구분", "직급", "직급구분", 
+        "출발일", "도착일", "숙박일수", "출장일수", "적용환율", 
+        "일당_KRW", "일당_지급처", "숙박비_KRW", "숙박비_지급처", 
+        "교통비_KRW", "교통비_지급처", "기타경비_KRW", "기타_지급처"
+    ])
 
-tab1, tab2, tab3 = st.tabs(["📋 데이터 관리 및 입력", "📊 대시보드 및 리포트", "🖨️ PDF/출력물 생성"])
+DEPARTMENTS = [
+    "임원", "경영지원본부", "경영지원실", "인사지원팀", "관리팀", 
+    "재무전략실", "노동조합", "재무팀", "자금팀", "정보실", 
+    "정보팀", "IBU", "성장전략실", "프로젝트팀", "구매전략본부", 
+    "HTB 대만지사", "구매팀", "VI팀", "품질혁신본부", "QM팀", 
+    "보전팀", "생산본부", "생산관리팀", "생산기술팀", "가공팀", 
+    "F/S가공", "정밀가공", "가공지원", "UNIT팀", "UNIT준비", 
+    "UNIT조립", "UNIT서비스", "생산1팀", "생산2팀", "서비스센터", 
+    "서비스1팀", "서비스2팀", "서비스3팀", "서비스4팀", "기술개발연구소", 
+    "MC개발팀", "TC개발팀", "5축개발팀", "UNIT개발팀", "제어개발팀", 
+    "제어SW개발팀", "가공기술1팀", "가공기술2팀", "소재사업부문", "기타"
+]
 
-with tab1:
-    st.subheader("신규 데이터 등록")
-    with st.form("input_form"):
-        col1, col2 = st.columns(2)
-        with col1:
-            emp_name = st.text_input("성명")
-            dept = st.selectbox("부서", ["인사총무팀", "생산관리팀", "기술지원팀", "경영기획팀"])
-        with col2:
-            task_type = st.selectbox("업무 구분", ["사원증 관리", "급여 및 제수당", "출장비 정산", "기타 행정"])
-            amount = st.number_input("관련 금액 / 수량", min_value=0, value=0, step=1000)
-        
-        submitted = st.form_submit_button("데이터 추가")
-        if submitted:
-            if emp_name:
-                new_row = {
-                    "등록일시": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
-                    "성명": emp_name,
-                    "부서": dept,
-                    "업무구분": task_type,
-                    "금액": amount
-                }
-                st.session_state.data_log.append(new_row)
-                st.success(f"'{emp_name}'님의 데이터가 성공적으로 등록되었습니다.")
-            else:
-                st.warning("성명을 입력해주세요.")
+POSITION_MAPPING = {
+    "회장": "임원(부사장이상)", "명예회장": "임원(부사장이상)", "사장": "임원(부사장이상)", "부사장": "임원(부사장이상)",
+    "전무": "임원", "상무": "임원", "이사": "임원", "이사대우": "임원",
+    "부장": "1급", "차장": "1급",
+    "과장": "2급", "대리": "2급",
+    "계장": "3급이하", "사원": "3급이하", "1급 기능장": "3급이하", "2급 기능장": "3급이하"
+}
 
-    st.markdown("### 등록된 데이터 목록")
-    if st.session_state.data_log:
-        df = pd.DataFrame(st.session_state.data_log)
-        edited_df = st.data_editor(df, num_rows="dynamic", use_container_width=True)
-    else:
-        info_df = pd.DataFrame(columns=["등록일시", "성명", "부서", "업무구분", "금액"])
-        st.data_editor(info_df, num_rows="dynamic", use_container_width=True)
+def get_region_by_location(loc):
+    loc = loc.strip()
+    if not loc:
+        return ""
+    group_gap = [
+        "영국", "독일", "프랑스", "이탈리아", "스페인", "스위스", "네덜란드", "벨기에", "오스트리아", "포르투갈", "스웨덴", "노르웨이", "덴마크", "핀란드", "아일랜드", "그리스",
+        "미국", "캐나다", "멕시코", "브라질", "아르헨티나", "칠레", "콜롬비아", "페루",
+        "UAE", "아랍에미리트", "사우디", "카타르", "이스라엘", "쿠웨이트", "오만", "바레인", "요르단", "레바논",
+        "이집트", "남아공", "남아프리카공화국", "나이지리아", "케냐", "모로코", "알제리", "튜니지아", "에티오피아", "가나",
+        "호주", "뉴질랜드", "피지", "파푸아뉴기니",
+        "폴란드", "체코", "루마니아", "우크라이나", "헝가리", "슬로바키아", "불가리아", "크로아티아", "세르비아", "리투아니아", "라트비아", "에스토니아",
+        "러시아",
+        "싱가포르", "홍콩", "대만"
+    ]
+    group_eul = ["중국"]
+    group_byeong = [
+        "베트남", "태국", "말레이시아", "인도네시아", "필리핀", "싱가포르", "미얀마", "캄보디아", "라오스", "브루나이",
+        "인도", "파키스탄", "방글라데시", "스리랑카", "네팔", "부탄", "몰디브",
+        "카자흐스탄", "우즈베키스탄", "투르크메니스탄", "키르기스스탄", "타지키스탄", "몽골"
+    ]
+    group_teuk = ["일본"]
 
-with tab2:
-    st.subheader("업무 현황 대시보드")
-    if st.session_state.data_log:
-        df_dash = pd.DataFrame(st.session_state.data_log)
-        col1, col2, col3 = st.columns(3)
-        col1.metric("총 등록 건수", f"{len(df_dash)} 건")
-        col2.metric("총 금액 합계", f"{df_dash['금액'].sum():,0f} 원")
-        col3.metric("참여 부서 수", f"{df_dash['부서'].nunique()} 개")
-        
-        st.markdown("#### 부서별 처리 현황")
-        dept_summary = df_dash.groupby("부서")["금액"].sum().reset_index()
-        st.bar_chart(dept_summary.set_index("부서"))
-    else:
-        st.info("시각화할 데이터가 없습니다. '데이터 관리 및 입력' 탭에서 데이터를 추가해주세요.")
-
-with tab3:
-    st.subheader("공식 문서 및 PDF 출력")
-    st.markdown("입력된 데이터를 바탕으로 보고서용 PDF 파일을 생성합니다.")
-    
-    doc_title = st.text_input("보고서 제목", "화천기공 업무 수행 보고서")
-    
-    if st.button("PDF 보고서 생성"):
-        pdf_filename = "hwacheon_report.pdf"
-        c = canvas.Canvas(pdf_filename, pagesize=A4)
-        width, height = A4
-        
-        # 상단 헤더
-        c.setFont(DEFAULT_FONT, 18)
-        c.drawString(50, height - 50, doc_title)
-        
-        c.setFont(DEFAULT_FONT, 10)
-        c.drawString(50, height - 70, f"출력 일시: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
-        c.drawString(50, height - 85, "발신: 화천기공 주식회사 인사총무팀")
-        c.line(50, height - 95, width - 50, height - 95)
-        
-        # 내용 작성
-        y_pos = height - 130
-        c.setFont(DEFAULT_FONT, 12)
-        c.drawString(50, y_pos, "[ 세부 내역 ]")
-        y_pos -= 25
-        
-        if st.session_state.data_log:
-            for item in st.session_state.data_log:
-                text = f"- [{item['부서']}] {item['성명']} ({item['업무구분']}): {item['금액']:,}원 (등록: {item['등록일시']})"
-                c.setFont(DEFAULT_FONT, 10)
-                c.drawString(55, y_pos, text)
-                y_pos -= 20
-                if y_pos < 50:
-                    c.showPage()
-                    y_pos = height - 50
+    if any(k in loc for k in group_teuk):
+        return "특"
+    elif any(k in loc for k in group_eul):
+        if not any(sub in loc for sub in ["홍콩", "대만"]):
+            return "을"
         else:
-            c.setFont(DEFAULT_FONT, 10)
-            c.drawString(55, y_pos, "등록된 내역이 없습니다.")
-            
-        c.save()
+            return "갑"
+    elif any(k in loc for k in group_gap):
+        return "갑"
+    elif any(k in loc for k in group_byeong):
+        return "병"
+    return ""
+
+def calculate_row_expenses(row, main_rate):
+    region = str(row.get("지역구분", ""))
+    rank = str(row.get("직급구분", ""))
+    days = int(row.get("출장일수", 1))
+    nights = int(row.get("숙박일수", 0))
+
+    rule = RULES_TABLE.get((region, rank), {"daily": 60, "hotel": 90, "curr": "USD"})
+    daily_std = rule["daily"]
+    hotel_std = rule["hotel"]
+
+    actual_rate = (main_rate / 100.0) if region == "특" else main_rate
+
+    total_daily_foreign = daily_std * days
+    daily_krw = int((total_daily_foreign * actual_rate) // 1000) * 1000
+
+    if hotel_std == -1:
+        hotel_krw = 0.0
+    else:
+        total_hotel_foreign = hotel_std * nights
+        hotel_krw = int((total_hotel_foreign * actual_rate) // 1000) * 1000
+
+    return daily_krw, hotel_krw
+
+def calculate_expenses_df(df, main_rate):
+    results = []
+    for _, row in df.iterrows():
+        days = int(row.get("출장일수", 1))
+        nights = int(row.get("숙박일수", 0))
         
-        with open(pdf_filename, "rb") as f:
-            pdf_bytes = f.read()
+        daily_krw, hotel_krw = calculate_row_expenses(row, main_rate)
+        
+        trans_krw = float(row.get("교통비_KRW", 0))
+        etc_krw = float(row.get("기타경비_KRW", 0))
+
+        trans_pay = str(row.get("교통비_지급처", "여행사"))
+        daily_pay = str(row.get("일당_지급처", "출장자"))
+        hotel_pay = str(row.get("숙박비_지급처", "출장자"))
+        etc_pay = str(row.get("기타_지급처", "여행사"))
+
+        agency_pay = 0
+        employee_pay = 0
+
+        for amt, pay in [(daily_krw, daily_pay), (hotel_krw, hotel_pay), (trans_krw, trans_pay), (etc_krw, etc_pay)]:
+            if "여행사" in pay:
+                agency_pay += amt
+            else:
+                employee_pay += amt
+
+        total_krw = agency_pay + employee_pay
+
+        res_dict = row.to_dict()
+        res_dict.update({
+            "적용환율": main_rate,
+            "일당_KRW": daily_krw,
+            "숙박비_KRW": hotel_krw,
+            "총출장비_KRW": total_krw,
+            "여행사지급액_KRW": agency_pay,
+            "출장자지급액_KRW": employee_pay,
+            "출장기간": f"{nights}박 {days}일"
+        })
+        results.append(res_dict)
+    return pd.DataFrame(results)
+
+# 상단 공통 설정 (환율 및 현재 입력 데이터 목록 표시)
+st.title("✈️ 화천기공 해외출장비 자동 산정 및 정산 프로그램")
+
+with st.container():
+    col_r1, col_r2 = st.columns([2, 3])
+    with col_r1:
+        main_rate = st.number_input("💱 메인 적용 환율 (USD/JPY 기준)", value=1415.30, step=0.01, format="%.2f")
+    with col_r2:
+        st.markdown("<br>", unsafe_allow_html=True)
+        st.markdown(f"🔗 [서울외국환중개 환율조회 사이트 바로가기](http://www.smbs.biz/ExRate/TodayExRate.jsp)", unsafe_allow_html=True)
+
+st.markdown("---")
+
+# 3가지 탭 구성
+tab1, tab2, tab3 = st.tabs([
+    "1. 출장자 정보 직접 입력", 
+    "2. 자금팀 연결용 이미지 파일 생성", 
+    "3. 출장자 출장비 산정내역서 (PDF)"
+])
+
+# ----------------------------------------------------
+# 탭 1: 출장자 정보 직접 입력
+# ----------------------------------------------------
+with tab1:
+    st.subheader("📝 출장자 정보 등록 및 관리")
+    
+    with st.form("traveler_form", clear_on_submit=False):
+        c1, c2, c3 = st.columns(3)
+        with c1:
+            dep = st.selectbox("부서", DEPARTMENTS)
+            name = st.text_input("성명", placeholder="성명을 입력하세요")
+            location = st.text_input("출장지", placeholder="예: 미국 로스앤젤레스, 일본 도쿄")
+        with c2:
+            region = st.selectbox("지역구분", ["", "갑", "을", "병", "특"], index=0)
             
-        st.download_button(
-            label="📄 PDF 보고서 다운로드",
-            data=pdf_bytes,
-            file_name="화천기공_업무보고서.pdf",
-            mime="application/pdf"
+            # 출장지 입력에 따른 자동 지역구분 연동
+            auto_reg = get_region_by_location(location)
+            if auto_reg and region == "":
+                region = auto_reg
+
+            position = st.selectbox("직급", [""] + list(POSITION_MAPPING.keys()))
+            
+            auto_rank = POSITION_MAPPING.get(position, "")
+            rank = st.selectbox("직급구분 (자동)", ["", "3급이하", "2급", "1급", "임원", "임원(부사장이상)"], 
+                                index=["", "3급이하", "2급", "1급", "임원", "임원(부사장이상)"].index(auto_rank) if auto_rank in ["3급이하", "2급", "1급", "임원", "임원(부사장이상)"] else 0)
+        with c3:
+            date_start = st.date_input("출발일", value=datetime.today())
+            date_end = st.date_input("도착일", value=datetime.today() + timedelta(days=4))
+            flight_night = st.checkbox("기내 박 적용 (숙박 1박 차감)")
+
+        st.markdown("##### 💰 경비 항목 입력")
+        e1, e2, e3, e4 = st.columns(4)
+        with e1:
+            air_krw = st.number_input("항공권 금액 (KRW)", value=0, step=10000)
+            air_pay = st.selectbox("항공권 지급처", ["여행사", "출장자"], index=0)
+        with e2:
+            esta_krw = st.number_input("ESTA / 비자 등 (KRW)", value=0, step=1000)
+            esta_pay = st.selectbox("ESTA 지급처", ["여행사", "출장자"], index=0)
+        with e3:
+            etc_krw = st.number_input("기타 경비 (KRW)", value=0, step=10000)
+            etc_pay = st.selectbox("기타 지급처", ["여행사", "출장자"], index=0)
+        with e4:
+            st.markdown("<br>", unsafe_allow_html=True)
+            submitted = st.form_submit_button("➕ 출장자 정보 등록 / 추가", use_container_width=True)
+
+        if submitted:
+            if not name.strip():
+                st.error("성명을 입력해주세요.")
+            elif not region:
+                st.error("지역구분을 선택해주세요.")
+            elif not rank:
+                st.error("직급을 선택해주세요.")
+            else:
+                days = (date_end - date_start).days + 1
+                nights = max(0, days - 1)
+                if flight_night:
+                    nights = max(0, nights - 1)
+
+                if days <= 0:
+                    st.error("도착일은 출발일 이후여야 합니다.")
+                else:
+                    new_data = {
+                        "부서": dep,
+                        "성명": name.strip(),
+                        "출장지": location.strip(),
+                        "지역구분": region,
+                        "직급": position,
+                        "직급구분": rank,
+                        "출발일": date_start.strftime("%Y-%m-%d"),
+                        "도착일": date_end.strftime("%Y-%m-%d"),
+                        "숙박일수": nights,
+                        "출장일수": days,
+                        "적용환율": main_rate,
+                        "일당_KRW": 0.0,
+                        "일당_지급처": "출장자",
+                        "숙박비_KRW": 0.0,
+                        "숙박비_지급처": "출장자",
+                        "교통비_KRW": air_krw + esta_krw,
+                        "교통비_지급처": air_pay,
+                        "기타경비_KRW": etc_krw,
+                        "기타_지급처": etc_pay
+                    }
+                    
+                    new_df = pd.DataFrame([new_data])
+                    st.session_state.df_input = pd.concat([st.session_state.df_input, new_df], ignore_index=True)
+                    st.success(f"성공적으로 등록되었습니다: {name.strip()} ({location})")
+
+    st.markdown("---")
+    st.subheader(f"📋 등록된 출장자 목록 (총 {len(st.session_state.df_input)}건)")
+    
+    if not st.session_state.df_input.empty:
+        # 실시간 환율 반영된 계산 결과 표시
+        display_df = calculate_expenses_df(st.session_state.df_input, main_rate)
+        st.dataframe(display_df, use_container_width=True)
+        
+        if st.button("🗑️ 전체 목록 초기화"):
+            st.session_state.df_input = pd.DataFrame(columns=st.session_state.df_input.columns)
+            st.rerun()
+    else:
+        st.info("등록된 출장자 정보가 없습니다. 위 폼을 통해 입력해주세요.")
+
+
+# ----------------------------------------------------
+# 탭 2: 자금팀 연결용 이미지 파일 생성
+# ----------------------------------------------------
+with tab2:
+    st.subheader("🖼️ 자금팀 제출용 정산 내역 이미지 생성")
+    st.markdown("입력된 모든 출장자의 내역을 종합하여 자금팀 확인용 요약 이미지(PNG)를 생성합니다.")
+
+    if st.session_state.df_input.empty:
+        st.warning("먼저 '1. 출장자 정보 직접 입력' 탭에서 출장자 데이터를 입력해주세요.")
+    else:
+        if st.button("🚀 자금팀 제출용 이미지 생성하기", type="primary"):
+            try:
+                df_res = calculate_expenses_df(st.session_state.df_input, main_rate)
+                
+                # 폰트 로드 (Streamlit Cloud 또는 로컬 환경 고려)
+                try:
+                    font_title = ImageFont.truetype("malgun.ttf", 26)
+                    font_bold = ImageFont.truetype("malgunbd.ttf", 15)
+                    font_regular = ImageFont.truetype("malgun.ttf", 14)
+                except:
+                    try:
+                        font_title = ImageFont.truetype("DejaVuSans-Bold.ttf", 26)
+                        font_bold = ImageFont.truetype("DejaVuSans-Bold.ttf", 15)
+                        font_regular = ImageFont.truetype("DejaVuSans.ttf", 14)
+                    except:
+                        font_title = font_bold = font_regular = ImageFont.load_default()
+
+                cols = ["순번", "출장지", "부서", "출장자", "출발", "도착", "출장기간", "교통비", "출장비", "기타금액", "집계", "출장자 지급", "여행사", "총계", "지급요청일"]
+                col_widths = [50, 110, 110, 110, 110, 110, 80, 110, 110, 100, 120, 120, 120, 120, 130]
+                row_height = 36
+                header_h1 = 30
+                
+                img_width = sum(col_widths) + 40
+                img_height = 140 + header_h1 + row_height + (len(df_res) * row_height)
+                
+                img = Image.new("RGB", (img_width, img_height), color=(255, 255, 255))
+                draw = ImageDraw.Draw(img)
+
+                current_year = datetime.now().year
+                draw.text((20, 20), f"{current_year}년 해외출장비 지급 내역", fill=(0, 0, 0), font=font_title)
+
+                x_start = 20
+                y_start = 80
+
+                x_hr_start = x_start + sum(col_widths[:7])
+                x_hr_end = x_start + sum(col_widths[:11])
+                draw.rectangle([x_hr_start, y_start, x_hr_end, y_start + header_h1], fill=(30, 78, 161), outline=(0, 0, 0))
+                draw.text((x_hr_start + (x_hr_end - x_hr_start)/2 - 60, y_start + 5), "인사지원팀 확인", fill=(255, 255, 255), font=font_bold)
+
+                x_fin_start = x_hr_end
+                x_fin_end = x_start + sum(col_widths[:15])
+                draw.rectangle([x_fin_start, y_start, x_fin_end, y_start + header_h1], fill=(245, 205, 170), outline=(0, 0, 0))
+                draw.text((x_fin_start + (x_fin_end - x_fin_start)/2 - 40, y_start + 5), "자금팀 확인", fill=(0, 0, 0), font=font_bold)
+
+                y_head = y_start + header_h1
+                x_curr = x_start
+                for idx, c_name in enumerate(cols):
+                    w = col_widths[idx]
+                    box = [x_curr, y_head, x_curr + w, y_head + row_height]
+                    
+                    if 7 <= idx <= 10:
+                        bg_color = (30, 78, 161)
+                        txt_color = (255, 255, 255)
+                    elif 11 <= idx <= 14:
+                        bg_color = (245, 205, 170)
+                        txt_color = (0, 0, 0)
+                    else:
+                        bg_color = (230, 230, 230)
+                        txt_color = (0, 0, 0)
+
+                    draw.rectangle(box, fill=bg_color, outline=(0, 0, 0))
+                    
+                    bbox = draw.textbbox((0, 0), c_name, font=font_bold)
+                    tw = bbox[2] - bbox[0]
+                    th = bbox[3] - bbox[1]
+                    tx = x_curr + (w - tw) / 2
+                    ty = y_head + (row_height - th) / 2 - 2
+                    draw.text((tx, ty), c_name, fill=txt_color, font=font_bold)
+                    x_curr += w
+
+                weekdays = ("월", "화", "수", "목", "금", "토", "일")
+                y_data = y_head + row_height
+
+                for row_i, r in df_res.iterrows():
+                    try:
+                        d_start_dt = datetime.strptime(str(r['출발일']), "%Y-%m-%d")
+                        start_str = d_start_dt.strftime("%m월 %d일")
+                        end_str = datetime.strptime(str(r['도착일']), "%Y-%m-%d").strftime("%m월 %d일")
+                        pay_req_dt = d_start_dt - timedelta(days=1)
+                        pay_req_str = f"{pay_req_dt.strftime('%m월 %d일')}({weekdays[pay_req_dt.weekday()]})"
+                    except:
+                        start_str = str(r['출발일'])
+                        end_str = str(r['도착일'])
+                        pay_req_str = str(r['출발일'])
+
+                    days_num = str(r['출장기간']).split('일')[0].split('박')[-1].strip() + "일" if '일' in str(r['출장기간']) else str(r['출장기간'])
+                    sub_total = r["교통비_KRW"] + r["숙박비_KRW"] + r["기타경비_KRW"] + r["일당_KRW"]
+
+                    row_vals = [
+                        str(row_i + 1),
+                        r["출장지"],
+                        r["부서"],
+                        r["성명"],
+                        start_str,
+                        end_str,
+                        days_num,
+                        f"₩{int(r['교통비_KRW']):,}",
+                        f"₩{int(r['숙박비_KRW'] + r['일당_KRW']):,}",
+                        f"₩{int(r['기타경비_KRW']):,}",
+                        f"₩{int(sub_total):,}",
+                        f"₩{int(r['출장자지급액_KRW']):,}",
+                        f"₩{int(r['여행사지급액_KRW']):,}",
+                        f"₩{int(r['총출장비_KRW']):,}",
+                        pay_req_str
+                    ]
+
+                    x_curr = x_start
+                    for idx, val in enumerate(row_vals):
+                        w = col_widths[idx]
+                        box = [x_curr, y_data, x_curr + w, y_data + row_height]
+                        
+                        f_to_use = font_bold if idx in [14, 10, 13] else font_regular
+                        
+                        if idx == 14:
+                            draw.rectangle(box, fill=(220, 38, 38), outline=(0, 0, 0))
+                            txt_color = (255, 255, 255)
+                        else:
+                            draw.rectangle(box, fill=(255, 255, 255), outline=(0, 0, 0))
+                            txt_color = (0, 0, 0)
+
+                        bbox = draw.textbbox((0, 0), str(val), font=f_to_use)
+                        tw = bbox[2] - bbox[0]
+                        th = bbox[3] - bbox[1]
+                        tx = x_curr + (w - tw) / 2
+                        ty = y_data + (row_height - th) / 2 - 2
+                        
+                        draw.text((tx, ty), str(val), fill=txt_color, font=f_to_use)
+                        x_curr += w
+                    y_data += row_height
+
+                # 메모리에 이미지 저장
+                buf = io.BytesIO()
+                img.save(buf, format="PNG")
+                byte_im = buf.getvalue()
+
+                st.success("이미지가 성공적으로 생성되었습니다!")
+                st.image(byte_im, caption="생성된 자금팀 확인용 내역서", use_container_width=True)
+
+                file_name = f"자금팀연결용_해외출장비지급내역_{datetime.now().strftime('%Y%m%d_%H%M%S')}.png"
+                st.download_button(
+                    label="💾 이미지 파일 다운로드 (.png)",
+                    data=byte_im,
+                    file_name=file_name,
+                    mime="image/png"
+                )
+
+            except Exception as e:
+                st.error(f"이미지 생성 중 오류 발생: {str(e)}")
+
+
+# ----------------------------------------------------
+# 탭 3: 출장자 출장비 산정내역서 (PDF)
+# ----------------------------------------------------
+with tab3:
+    st.subheader("📄 출장자별 출장비 산정내역서 PDF 생성")
+    st.markdown("등록된 출장자별 공식 산정내역서 PDF를 개별 또는 일괄 생성합니다.")
+
+    if st.session_state.df_input.empty:
+        st.warning("먼저 '1. 출장자 정보 직접 입력' 탭에서 출장자 데이터를 입력해주세요.")
+    else:
+        df_res = calculate_expenses_df(st.session_state.df_input, main_rate)
+        
+        selected_index = st.selectbox(
+            "PDF를 생성할 출장자를 선택하세요:",
+            options=df_res.index,
+            format_func=lambda i: f"[{df_res.loc[i, '부서']}] {df_res.loc[i, '성명']} (출장지: {df_res.loc[i, '출장지']})"
         )
-        st.success("PDF 파일 생성이 완료되었습니다!")
+
+        if st.button("📥 선택한 출장자 산정내역서 PDF 생성", type="primary"):
+            r = df_res.loc[selected_index]
+            
+            try:
+                try:
+                    pdfmetrics.registerFont(TTFont("MalgunGothic", "malgun.ttf"))
+                    pdfmetrics.registerFont(TTFont("MalgunGothicBold", "malgunbd.ttf"))
+                    font_name = "MalgunGothic"
+                    font_bold = "MalgunGothicBold"
+                except:
+                    font_name = "Helvetica"
+                    font_bold = "Helvetica-Bold"
+
+                pdf_buffer = io.BytesIO()
+                doc = SimpleDocTemplate(
+                    pdf_buffer,
+                    pagesize=A4,
+                    rightMargin=25, leftMargin=25, topMargin=25, bottomMargin=25
+                )
+                elements = []
+
+                style_title = ParagraphStyle('TitleStyle', fontName=font_bold, fontSize=18, leading=22, alignment=1)
+                style_h2 = ParagraphStyle('H2Style', fontName=font_bold, fontSize=11, leading=14, textColor=colors.HexColor("#000000"))
+                style_center = ParagraphStyle('CenterStyle', fontName=font_name, fontSize=9, leading=12, alignment=1)
+                style_center_bold = ParagraphStyle('CenterBold', fontName=font_bold, fontSize=9, leading=12, alignment=1)
+                style_header_cell = ParagraphStyle('HeaderCell', fontName=font_bold, fontSize=9, leading=11, alignment=1, textColor=colors.black)
+
+                elements.append(Paragraph("해외출장비 산정 내역서", style_title))
+                elements.append(Spacer(1, 10))
+
+                rate_val = float(r['적용환율'])
+                if str(r['지역구분']) == "특":
+                    rate_val_str = f"1 ¥ = {rate_val:,.2f} 원 (적용환율: {rate_val / 100.0:,.4f})"
+                else:
+                    rate_val_str = f"1 USD = {rate_val:,.2f} 원"
+
+                info_data = [
+                    [
+                        Paragraph("소속", style_center_bold), Paragraph(str(r["부서"]), style_center),
+                        Paragraph("성명", style_center_bold), Paragraph(str(r["성명"]), style_center),
+                        Paragraph("직급", style_center_bold), Paragraph(str(r["직급"]), style_center)
+                    ],
+                    [
+                        Paragraph("출장지", style_center_bold), Paragraph(str(r["출장지"]), style_center),
+                        Paragraph("지역구분", style_center_bold), Paragraph(str(r["지역구분"]), style_center),
+                        Paragraph("직급구분", style_center_bold), Paragraph(str(r["직급구분"]), style_center)
+                    ],
+                    [
+                        Paragraph("출발일", style_center_bold), Paragraph(str(r["출발일"]), style_center),
+                        Paragraph("도착일", style_center_bold), Paragraph(str(r["도착일"]), style_center),
+                        Paragraph("출장기간", style_center_bold), Paragraph(str(r["출장기간"]), style_center)
+                    ],
+                    [
+                        Paragraph("적용환율", style_center_bold), Paragraph("", style_center), Paragraph("", style_center),
+                        Paragraph(rate_val_str, style_center), Paragraph("", style_center), Paragraph("", style_center)
+                    ]
+                ]
+
+                info_table = Table(info_data, colWidths=[65, 110, 65, 110, 65, 125])
+                info_table.setStyle(TableStyle([
+                    ('BACKGROUND', (0,0), (0,-1), colors.HexColor("#F1F5F9")),
+                    ('BACKGROUND', (2,0), (2,-1), colors.HexColor("#F1F5F9")),
+                    ('BACKGROUND', (4,0), (4,-1), colors.HexColor("#F1F5F9")),
+                    ('BACKGROUND', (0, 3), (-1, 3), colors.HexColor("#FEF08A")),
+                    ('SPAN', (0, 3), (2, 3)),
+                    ('SPAN', (3, 3), (5, 3)),
+                    ('GRID', (0,0), (-1,-1), 0.5, colors.HexColor("#94A3B8")),
+                    ('VALIGN', (0,0), (-1,-1), 'MIDDLE'),
+                    ('TOPPADDING', (0,0), (-1,-1), 5),
+                    ('BOTTOMPADDING', (0,0), (-1,-1), 5),
+                ]))
+                elements.append(info_table)
+                elements.append(Spacer(1, 12))
+
+                elements.append(Paragraph("■ 적용 출장비 산정 기준", style_h2))
+                elements.append(Spacer(1, 4))
+
+                region = str(r["지역구분"])
+                rank = str(r["직급구분"])
+                rule = RULES_TABLE.get((region, rank), {"daily": 60, "hotel": 90, "curr": "USD"})
+                
+                daily_std = rule["daily"]
+                hotel_std = rule["hotel"]
+                curr_type = rule["curr"]
+
+                daily_std_str = f"{daily_std:,} {curr_type} / 일" if curr_type == "JPY" else f"{daily_std} USD / 일"
+                calc_rate_display = (rate_val / 100.0) if region == "특" else rate_val
+                rate_str_val = f"{calc_rate_display:,.4f}"
+
+                daily_formula = f"{daily_std} {curr_type} * {r['출장일수']}일 * {rate_str_val} (천원단위절사)"
+                if hotel_std == -1:
+                    hotel_std_str = "실비"
+                    hotel_formula = "실비 정산"
+                    hotel_amt_str = "실비"
+                else:
+                    hotel_std_str = f"{hotel_std:,} {curr_type} / 박" if curr_type == "JPY" else f"{hotel_std} USD / 박"
+                    hotel_formula = f"{hotel_std} {curr_type} * {r['숙박일수']}박 * {rate_str_val} (천원단위절사)"
+                    hotel_amt_str = f"₩ {int(r['숙박비_KRW']):,}"
+
+                total_sum_val = int(r['숙박비_KRW'] + r['일당_KRW']) if hotel_std != -1 else int(r['일당_KRW'])
+
+                calc_data = [
+                    [Paragraph("구분", style_header_cell), Paragraph("산정 기준", style_header_cell), Paragraph("기간 적용", style_header_cell), Paragraph("금액", style_header_cell), Paragraph("원화 환산 산식", style_header_cell)],
+                    [Paragraph("숙박비", style_center), Paragraph(hotel_std_str, style_center), Paragraph(f"{r['숙박일수']} 박", style_center), Paragraph(hotel_amt_str, style_center), Paragraph(hotel_formula, style_center)],
+                    [Paragraph("일당", style_center), Paragraph(daily_std_str, style_center), Paragraph(f"{r['출장일수']} 일", style_center), Paragraph(f"₩ {int(r['일당_KRW']):,}", style_center), Paragraph(daily_formula, style_center)],
+                    [Paragraph("지급 총액", style_center_bold), Paragraph("", style_center), Paragraph("", style_center), Paragraph(f"₩ {total_sum_val:,}", style_center_bold), Paragraph("숙박비 + 일당", style_center)]
+                ]
+
+                calc_table = Table(calc_data, colWidths=[70, 110, 70, 110, 190])
+                calc_table.setStyle(TableStyle([
+                    ('BACKGROUND', (0,0), (-1,0), colors.HexColor("#E2E8F0")),
+                    ('BACKGROUND', (0,-1), (-1,-1), colors.HexColor("#FEF08A")),
+                    ('GRID', (0,0), (-1,-1), 0.5, colors.HexColor("#94A3B8")),
+                    ('VALIGN', (0,0), (-1,-1), 'MIDDLE'),
+                    ('TOPPADDING', (0,0), (-1,-1), 4),
+                    ('BOTTOMPADDING', (0,0), (-1,-1), 4),
+                ]))
+                elements.append(calc_table)
+                elements.append(Spacer(1, 12))
+
+                elements.append(Paragraph("■ 해외출장 지급규정", style_h2))
+                elements.append(Spacer(1, 4))
+
+                rule_header = [
+                    Paragraph("지역", style_header_cell),
+                    Paragraph("직급", style_header_cell),
+                    Paragraph("일당", style_header_cell),
+                    Paragraph("숙박", style_header_cell),
+                    Paragraph("비고", style_header_cell)
+                ]
+                rule_rows = [rule_header]
+
+                for (reg, rk), info in RULES_TABLE.items():
+                    d_val = f"${info['daily']}" if info['curr'] == "USD" else f"¥{info['daily']:,}"
+                    h_val = "실비" if info['hotel'] == -1 else (f"${info['hotel']}" if info['curr'] == "USD" else f"¥{info['hotel']:,}")
+                    note = "엔화" if info['curr'] == "JPY" else ""
+                    
+                    rule_rows.append([
+                        Paragraph(reg, style_center),
+                        Paragraph(rk, style_center),
+                        Paragraph(d_val, style_center),
+                        Paragraph(h_val, style_center),
+                        Paragraph(note, style_center)
+                    ])
+
+                rule_table = Table(rule_rows, colWidths=[70, 130, 110, 110, 130])
+                rule_table.setStyle(TableStyle([
+                    ('BACKGROUND', (0,0), (-1,0), colors.HexColor("#CBD5E1")),
+                    ('GRID', (0,0), (-1,-1), 0.5, colors.HexColor("#94A3B8")),
+                    ('VALIGN', (0,0), (-1,-1), 'MIDDLE'),
+                    ('TOPPADDING', (0,0), (-1,-1), 2.5),
+                    ('BOTTOMPADDING', (0,0), (-1,-1), 2.5),
+                ]))
+                elements.append(rule_table)
+                elements.append(Spacer(1, 12))
+
+                today_str = datetime.now().strftime('%Y년 %m월 %d일')
+                footer_data = [
+                    [Paragraph("위와 같이 해외출장비를 정산 및 지급합니다.", style_center)],
+                    [Spacer(1, 4)],
+                    [Paragraph(f"신청일 : {today_str}", style_center)]
+                ]
+                footer_table = Table(footer_data, colWidths=[550])
+                footer_table.setStyle(TableStyle([
+                    ('ALIGN', (0,0), (-1,-1), 'CENTER'),
+                    ('VALIGN', (0,0), (-1,-1), 'MIDDLE'),
+                ]))
+                elements.append(footer_table)
+
+                doc.build(elements)
+                pdf_data = pdf_buffer.getvalue()
+
+                st.success(f"{r['성명']} 님의 출장비 산정내역서 PDF가 생성되었습니다.")
+                st.download_button(
+                    label=f"💾 {r['성명']}_산정내역서.pdf 다운로드",
+                    data=pdf_data,
+                    file_name=f"해외출장비_산정내역서_{r['성명']}_{datetime.now().strftime('%Y%m%d')}.pdf",
+                    mime="application/pdf"
+                )
+
+            except Exception as e:
+                st.error(f"PDF 생성 중 오류 발생: {str(e)}")

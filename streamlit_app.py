@@ -12,7 +12,7 @@ try:
 except Exception:
     pass
 
-# 입력란 정렬, 총계/총액 행 배경 전체 채우기 및 숫자 입력 필드의 스피너(+/-) 버튼 숨기기 위한 커스텀 CSS
+# 입력란 정렬 및 총계/총액 행 배경 전체 채우기 위한 커스텀 CSS
 st.markdown(
     """
     <style>
@@ -21,15 +21,6 @@ st.markdown(
     }
     input[aria-label*="금액"] {
         text-align: right !important;
-    }
-    /* 숫자 입력 필드의 증감(+/-) 버튼 제거 */
-    input[type=number]::-webkit-inner-spin-button, 
-    input[type=number]::-webkit-outer-spin-button { 
-        -webkit-appearance: none; 
-        margin: 0; 
-    }
-    input[type=number] {
-        -moz-appearance: textfield;
     }
     /* 총계 및 총액 행 배경을 셀 전체로 확장하기 위한 스타일 */
     .row-highlight-yellow {
@@ -395,7 +386,7 @@ with tab1:
             f"📅 최종 산정된 출장 기간: **{calculated_nights}박 {calculated_days}일**"
         )
 
-    # 규정 단가 기반 자동 계산 수행 (백단위 이하 절사 반영)
+    # 규정 단가 기반 자동 계산 수행 (천원 단위 절사)
     std_daily, std_hotel = get_standard_rates(region_group, position_group)
     applied_rate = (
         exchange_rate / 100.0 if region_group == "특" else exchange_rate
@@ -431,7 +422,7 @@ with tab1:
         )
     with th3:
         st.markdown(
-            "<div style='text-align: center;'><b>금액</b></div>",
+            "<div style='text-align: center;'><b>금액 (천원단위 콤마 표시)</b></div>",
             unsafe_allow_html=True,
         )
     with th4:
@@ -461,17 +452,28 @@ with tab1:
                 label_visibility="collapsed",
             )
         with tc3:
-            # 입력값에서 백단위 이하 절사(천원단위 표시) 적용 및 스피너 제거
-            raw_t_amt = st.number_input(
+            key_prefix = f"t_amt_str_{idx}"
+            if key_prefix not in st.session_state:
+                st.session_state[key_prefix] = f"{int(row_data['amount']):,}"
+
+            def make_on_change(k):
+                def callback():
+                    val = st.session_state[k]
+                    digits = "".join(filter(str.isdigit, val))
+                    st.session_state[k] = (
+                        f"{int(digits):,}" if digits else "0"
+                    )
+
+                return callback
+
+            amt_str = st.text_input(
                 f"교통비 금액 {idx}",
-                min_value=0,
-                value=int(row_data["amount"]),
-                step=1000,
-                format="%d",
-                key=f"t_amt_{idx}",
+                key=key_prefix,
+                on_change=make_on_change(key_prefix),
                 label_visibility="collapsed",
             )
-            t_amt = int((raw_t_amt // 1000) * 1000)
+            digits = "".join(filter(str.isdigit, amt_str))
+            t_amt = int((int(digits or 0) // 1000) * 1000)
         with tc4:
             p_idx = (
                 payer_options.index(row_data["payer"])
@@ -512,13 +514,9 @@ with tab1:
 
     st.markdown("---")
 
-    # --- 2. 출장비 섹션 (숙박비, 일당 자동계산 반영 - 백단위 이하 절사) ---
-    st.session_state.travel_exp_rows[0]["amount"] = int(
-        (auto_calc_hotel // 1000) * 1000
-    )
-    st.session_state.travel_exp_rows[1]["amount"] = int(
-        (auto_calc_daily // 1000) * 1000
-    )
+    # --- 2. 출장비 섹션 (숙박비, 일당 자동계산 반영 - 백단위 절사) ---
+    st.session_state.travel_exp_rows[0]["amount"] = auto_calc_hotel
+    st.session_state.travel_exp_rows[1]["amount"] = auto_calc_daily
 
     updated_travel_exp_rows = []
     travel_exp_sum = 0
@@ -537,17 +535,28 @@ with tab1:
                 label_visibility="collapsed",
             )
         with tec3:
-            raw_te_amt = st.number_input(
+            key_prefix = f"te_amt_str_{idx}"
+            st.session_state[key_prefix] = f"{int(row_data['amount']):,}"
+
+            def make_on_change_te(k):
+                def callback():
+                    val = st.session_state[k]
+                    digits = "".join(filter(str.isdigit, val))
+                    st.session_state[k] = (
+                        f"{int(digits):,}" if digits else "0"
+                    )
+
+                return callback
+
+            amt_str = st.text_input(
                 f"출장비 금액 {idx}",
-                min_value=0,
-                value=int(row_data["amount"]),
-                step=1000,
-                format="%d",
-                key=f"te_amt_{idx}",
+                key=key_prefix,
+                on_change=make_on_change_te(key_prefix),
                 label_visibility="collapsed",
             )
-            te_amt = int((raw_te_amt // 1000) * 1000)
-        with tec4:
+            digits = "".join(filter(str.isdigit, amt_str))
+            te_amt = int((int(digits or 0) // 1000) * 1000)
+        with tc4:
             p_idx = (
                 payer_options.index(row_data["payer"])
                 if row_data["payer"] in payer_options
@@ -606,16 +615,28 @@ with tab1:
                 label_visibility="collapsed",
             )
         with oc3:
-            raw_it_amt = st.number_input(
+            key_prefix = f"other_amt_str_{idx}"
+            if key_prefix not in st.session_state:
+                st.session_state[key_prefix] = f"{int(row_data['amount']):,}"
+
+            def make_on_change_other(k):
+                def callback():
+                    val = st.session_state[k]
+                    digits = "".join(filter(str.isdigit, val))
+                    st.session_state[k] = (
+                        f"{int(digits):,}" if digits else "0"
+                    )
+
+                return callback
+
+            amt_str = st.text_input(
                 f"기타 금액 {idx}",
-                min_value=0,
-                value=int(row_data["amount"]),
-                step=1000,
-                format="%d",
-                key=f"other_amt_{idx}",
+                key=key_prefix,
+                on_change=make_on_change_other(key_prefix),
                 label_visibility="collapsed",
             )
-            it_amt = int((raw_it_amt // 1000) * 1000)
+            digits = "".join(filter(str.isdigit, amt_str))
+            it_amt = int((int(digits or 0) // 1000) * 1000)
         with oc4:
             p_idx = (
                 payer_options.index(row_data["payer"])

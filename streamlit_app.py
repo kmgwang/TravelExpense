@@ -11,13 +11,13 @@ try:
 except Exception:
     pass
 
-st.title("✈️ 화천기공 해외출장비 정산 및 내역서 자동 생성 시스템")
+st.title("✈️ 화천기공 해외출장비 정산 및 자금팀 연결 자동화 시스템")
 st.markdown(
-    "인사지원팀 해외출장 경비 산정, 자금팀 제출용 정산표 분리, 출장자용 산정 내역서 자동 생성 프로그램입니다."
+    "엑셀 '1. 계산 시트' 프로세스(기본데이터 수기 입력 및 자동 산정)와 '2. 자금팀연결용 시트' 송금 요청 데이터 생성 프로그램입니다."
 )
 st.markdown("---")
 
-# 세션 스테이트 초기화 (기본 데이터 구성)
+# 세션 스테이트 초기화
 if "travel_list" not in st.session_state:
     st.session_state.travel_list = []
 
@@ -71,7 +71,7 @@ def get_region_group(country):
         return "갑"
 
 
-# 3. 규정 기준 단가 반환 함수
+# 3. 규정 기준 단가 반환 함수 (C4:G24 시뮬레이션)
 def get_standard_rates(region, pos_group):
     rates = {
         "갑": {
@@ -119,61 +119,73 @@ def process_travel_data(data_list):
         d["기준일당_외화"] = std_daily
         d["기준숙박_외화"] = std_hotel
 
-        raw_rate = d["환율"]
-        if region == "특":
-            applied_rate = raw_rate / 100.0
-        else:
-            applied_rate = raw_rate
+        # 숙박일 및 출장기간 자동 계산 (출발일~도착일 기준)
+        start = pd.to_datetime(d["출발일"])
+        end = pd.to_datetime(d["도착일"])
+        trip_days = (end - start).days + 1
+        if trip_days < 1:
+            trip_days = 1
+        hotel_nights = trip_days - 1 if trip_days > 1 else 0
 
-        calc_daily = std_daily * applied_rate
+        d["출장기간_일수"] = trip_days
+        d["숙박일_일수"] = hotel_nights
+
+        # 환율 적용 (특 지역은 100 나눔)
+        raw_rate = d["환율"]
+        applied_rate = raw_rate / 100.0 if region == "특" else raw_rate
+
+        # 일당 및 숙박비 원화 환산 (백원단위 이하 절사: // 100 * 100)
+        calc_daily = std_daily * applied_rate * trip_days
         d["산정일당_원화"] = int(calc_daily // 100 * 100)
 
         if std_hotel == "실비":
             calc_hotel = d.get("실비숙박_입력", 0)
         else:
-            calc_hotel = std_hotel * applied_rate
+            calc_hotel = std_hotel * applied_rate * hotel_nights
         d["산정숙박_원화"] = int(calc_hotel // 100 * 100)
 
-        d["직원_계좌입금액"] = d["산정일당_원화"] + d["산정숙박_원화"]
-        d["여행사_지급액"] = (
-            d.get("항공료", 0)
-            + d.get("ESTA기타", 0)
-            + d.get("여행자보험", 0)
-            + d.get("수수료", 0)
+        # Q3:V17 및 Y3:AK5 매핑 항목 계산
+        d["출장자지급액_소계"] = d["산정일당_원화"] + d["산정숙박_원화"]
+        d["여행사지급액_항공료"] = d.get("항공료", 0)
+        d["여행사지급액_기타"] = (
+            d.get("ESTA기타", 0) + d.get("여행자보험", 0) + d.get("수수료", 0)
         )
-        d["총출장비"] = d["직원_계좌입금액"] + d["여행사_지급액"]
+        d["여행사지급액_소계"] = (
+            d["여행사지급액_항공료"] + d["여행사지급액_기타"]
+        )
+        d["총합계"] = d["출장자지급액_소계"] + d["여행사지급액_소계"]
+
         processed.append(d)
 
     return pd.DataFrame(processed)
 
 
-# 3가지 탭 구성
-tab1, tab2, tab3 = st.tabs(
+# 2가지 핵심 시트(탭) 구성
+tab1, tab2 = st.tabs(
     [
-        "📋 1. 출장 정보 입력",
-        "💰 2. 자금팀 연결 자료 생성",
-        "📄 3. 출장비 산정 내역서 생성",
+        "📊 1. 계산 시트 (기본데이터 입력 및 산정)",
+        "💰 2. 자금팀연결용 시트 (송금 요청)",
     ]
 )
 
 # ----------------------------------------------------
-# [Tab 1] 출장 정보 입력
+# [Tab 1] 1. 계산 시트
 # ----------------------------------------------------
 with tab1:
-    st.header("📋 해외출장 신청 및 경비 정보 입력")
+    st.header("📊 [1. 계산 시트] 해외출장비 기본데이터 입력 및 자동 산정")
     st.markdown(
-        "출장자 정보와 출장지, 직급을 입력하면 규정에 따른 일당과 숙박비가 자동 산정됩니다."
+        "출장자 정보, 환율, 출장지, 기간을 입력하면 규정(C4:G24)을 자동 조회하여 Q3:V17 / Y3:AK5 영역의 산정 결과가 도출됩니다."
     )
     st.markdown(
         "🔗 [서울외국환중개 환율 조회 사이트 바로가기](http://www.smbs.biz/ExRate/TodayExRate.jsp)"
     )
 
-    with st.form("travel_input_form"):
-        col_a, col_b = st.columns(2)
-        with col_a:
-            st.subheader("👤 출장자 정보")
-            name = st.text_input("출장자 성명")
-            department = st.text_input("부서", value="인사지원팀")
+    with st.form("calc_sheet_form"):
+        col1, col2 = st.columns(2)
+        with col1:
+            st.subheader("👤 출장자 기본 정보 입력")
+            name = st.text_input("출장자")
+            exchange_date = st.date_input("환율적용일자")
             position = st.selectbox(
                 "직급",
                 [
@@ -192,46 +204,46 @@ with tab1:
                     "2급기능장",
                 ],
             )
-            # 직급 구분 자동 표시 기능 (참고용)
             preview_pos_group = get_position_group(position)
             st.text_input(
-                "직급 구분",
+                "직급구분 (자동 판정)",
                 value=preview_pos_group,
                 disabled=True,
-                help="선택한 직급에 따라 자동 판정됩니다.",
             )
 
-        with col_b:
-            st.subheader("🌍 출장지 및 일정")
-            country = st.text_input("출장지")
-            start_date = st.date_input("출장 시작일")
-            end_date = st.date_input("출장 종료일")
+        with col2:
+            st.subheader("🌍 출장지 및 일정 입력")
+            country = st.text_input(
+                "출장지 (예: 미국, 일본, 베트남, 독일 등)"
+            )
+            preview_region = get_region_group(country if country else "미국")
+            st.text_input(
+                "지역구분 (자동 판정)", value=preview_region, disabled=True
+            )
+
+            start_date = st.date_input("출발일")
+            end_date = st.date_input("도착일")
             exchange_rate = st.number_input(
-                "적용 환율 (서울외국환중개 고시 환율)",
+                "적용환율 (서울외국환중개 고시 환율 수기 입력)",
                 min_value=0.0,
                 value=1350.0,
                 step=1.0,
             )
 
         st.markdown("---")
-        st.subheader("💵 실비 및 여행사 대행 경비 입력 (원화)")
-        col_c, col_d = st.columns(2)
-        with col_c:
-            st.markdown("##### [ 여행사 송금 항목 ]")
+        st.subheader("💳 실비 및 여행사 송금 경비 입력 (원화)")
+        col3, col4 = st.columns(2)
+        with col3:
             flight = st.number_input(
-                "항공료", min_value=0, value=0, step=10000
+                "항공료 (여행사 지급)", min_value=0, value=0, step=10000
             )
-            esta = st.number_input(
-                "ESTA / 비자 비용", min_value=0, value=0, step=1000
+            esta_ins = st.number_input(
+                "ESTA / 여행자보험 / 수수료 등 (여행사 지급)",
+                min_value=0,
+                value=0,
+                step=1000,
             )
-            insurance = st.number_input(
-                "여행자 보험", min_value=0, value=0, step=1000
-            )
-            fee = st.number_input(
-                "변경/취소 수수료", min_value=0, value=0, step=1000
-            )
-        with col_d:
-            st.markdown("##### [ 숙박비 실비 적용 대상자용 ]")
+        with col4:
             actual_hotel = st.number_input(
                 "숙박비 실비 (임원 부사장 이상인 경우 입력)",
                 min_value=0,
@@ -239,210 +251,120 @@ with tab1:
                 step=10000,
             )
             st.info(
-                "※ 임원(부사장 이상)의 숙박비는 '실비'로 적용되며, 그 외 직급은 규정 정액이 자동 적용됩니다."
+                "※ 출발일과 도착일에 따라 숙박일 및 출장기간이 자동 계산되며, C4:G24 규정 단가표에 연동됩니다."
             )
 
         submitted = st.form_submit_button(
-            "➕ 입력한 출장 내역 규정 적용 및 추가"
+            "➕ 계산 시트에 데이터 반영 및 산정 실행"
         )
 
         if submitted:
             if not name or not country:
-                st.error("⚠️ 출장자 성명과 출장지는 필수 입력 항목입니다.")
+                st.error("⚠️ 출장자와 출장지는 필수 입력 항목입니다.")
             else:
                 new_data = {
-                    "출장자성명": name,
-                    "부서": department,
-                    "직급": position,
+                    "출장자": name,
+                    "환율적용일자": str(exchange_date),
                     "출장지": country,
-                    "출장시작일": str(start_date),
-                    "출장종료일": str(end_date),
+                    "직급": position,
+                    "출발일": str(start_date),
+                    "도착일": str(end_date),
                     "환율": exchange_rate,
                     "항공료": flight,
-                    "ESTA기타": esta,
-                    "여행자보험": insurance,
-                    "수수료": fee,
+                    "ESTA기타": esta_ins,
+                    "여행자보험": 0,
+                    "수수료": 0,
                     "실비숙박_입력": actual_hotel,
                 }
                 st.session_state.travel_list.append(new_data)
-                st.success(f"✅ {name} 님의 출장 경비가 규정에 맞춰 산정되었습니다!")
+                st.success(
+                    f"✅ [{name}] 님의 해외출장비 계산이 완료되었습니다!"
+                )
 
     st.markdown("---")
-    st.subheader("📊 현재 등록된 전체 출장 내역 목록")
+    st.subheader("📋 [Q3:V17 영역] 해외출장비 자동 산정 결과 미리보기")
     if len(st.session_state.travel_list) > 0:
-        current_df = process_travel_data(st.session_state.travel_list)
-        st.dataframe(current_df, use_container_width=True)
-        if st.button("🗑️ 전체 데이터 초기화"):
+        processed_df = process_travel_data(st.session_state.travel_list)
+        st.dataframe(processed_df, use_container_width=True)
+
+        if st.button("🗑️ 계산 시트 데이터 초기화"):
             st.session_state.travel_list = []
             st.rerun()
     else:
-        st.info("등록된 출장 내역이 없습니다.")
+        st.info("입력된 출장 기본데이터가 없습니다.")
 
 # ----------------------------------------------------
-# [Tab 2] 자금팀 연결 자료 생성
+# [Tab 2] 2. 자금팀연결용 시트
 # ----------------------------------------------------
 with tab2:
-    st.header("💰 자금팀 제출용 정산 집계표 생성")
+    st.header("💰 [2. 자금팀연결용 시트] 송금 요청 데이터 생성")
     st.markdown(
-        "출장자에게 송금할 금액(일비+숙박비)과 여행사에 송금할 금액(항공권+ESTA+보험 등)이 완벽히 분리된 자금팀 제출용 표입니다."
+        "1. 계산 시트의 산정 결과(Y3:AK5 영역 값)를 연동하여, 교통비 및 기타 항목은 여행사로, 숙박비 및 일당은 출장자에게 송금하도록 정리한 자금팀 제출용 시트입니다."
     )
 
     if len(st.session_state.travel_list) > 0:
         processed_df = process_travel_data(st.session_state.travel_list)
 
-        m1, m2, m3 = st.columns(3)
-        with m1:
-            st.metric(
-                label="총 출장 건수", value=f"{len(processed_df)} 건"
-            )
-        with m2:
-            total_agency = processed_df["여행사_지급액"].sum()
-            st.metric(
-                label="총 여행사 송금 총액",
-                value=f"{total_agency:,.0f} 원",
-            )
-        with m3:
-            total_employee = processed_df["직원_계좌입금액"].sum()
-            st.metric(
-                label="총 직원 계좌 입금 총액",
-                value=f"{total_employee:,.0f} 원",
-            )
-
-        st.markdown("---")
-        st.subheader("📑 자금팀 송금 요청 분리 집계표")
-
-        fund_view_df = processed_df[
+        # 자금팀 연결용 전용 뷰 생성 (Y3:AK5 핵심 매핑 구조 반영)
+        fund_sheet_df = processed_df[
             [
-                "출장자성명",
-                "부서",
-                "직급",
-                "직급구분",
+                "출장자",
                 "출장지",
-                "직원_계좌입금액",
-                "여행사_지급액",
-                "총출장비",
+                "직급구분",
+                "출장기간_일수",
+                "숙박일_일수",
+                "환율",
+                "산정일당_원화",
+                "산정숙박_원화",
+                "출장자지급액_소계",
+                "여행사지급액_항공료",
+                "여행사지급액_기타",
+                "여행사지급액_소계",
+                "총합계",
             ]
         ].copy()
-        fund_view_df.columns = [
-            "성명",
-            "부서",
-            "직급",
-            "직급구분",
+
+        fund_sheet_df.columns = [
+            "출장자",
             "출장지",
-            "직원지급액(일비/숙박)",
-            "여행사지급액(항공/보험등)",
+            "직급",
+            "출장기간",
+            "숙박일",
+            "적용환율",
+            "일당(출장자)",
+            "숙박비(출장자)",
+            "출장자 지급 소계",
+            "항공료(여행사)",
+            "기타비용(여행사)",
+            "여행사 지급 소계",
             "총합계",
         ]
-        st.dataframe(fund_view_df, use_container_width=True)
 
-        output_agency = io.BytesIO()
-        with pd.ExcelWriter(output_agency, engine="openpyxl") as writer:
+        st.subheader("📑 자금팀 송금 집계 표 (Y3:AK5 연동 데이터)")
+        st.dataframe(fund_sheet_df, use_container_width=True)
+
+        # 엑셀 다운로드 (계산 시트 및 자금팀연결용 시트 분리 포함)
+        output_excel = io.BytesIO()
+        with pd.ExcelWriter(output_excel, engine="openpyxl") as writer:
             processed_df.to_excel(
-                writer, index=False, sheet_name="자금팀_정산집계표"
+                writer, index=False, sheet_name="1. 계산 시트"
             )
-        output_agency.seek(0)
+            fund_sheet_df.to_excel(
+                writer, index=False, sheet_name="2. 자금팀연결용 시트"
+            )
+        output_excel.seek(0)
 
         st.download_button(
-            label="📥 자금팀 제출용 정산 집계표 엑셀 다운로드",
-            data=output_agency,
-            file_name="화천기공_자금팀_출장정산집계표.xlsx",
+            label="📥 엑셀 파일 다운로드 (계산 시트 + 자금팀연결용 시트)",
+            data=output_excel,
+            file_name="화천기공_해외출장비_정산_및_자금팀연결용.xlsx",
             mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
         )
     else:
         st.warning(
-            "⚠️ 입력된 출장 정보가 없습니다. [1. 출장 정보 입력] 탭에서 데이터를 먼저 입력해 주세요."
+            "⚠️ 입력된 출장 정보가 없습니다. [1. 계산 시트] 탭에서 데이터를 먼저 입력해 주세요."
         )
 
-# ----------------------------------------------------
-# [Tab 3] 출장비 산정 내역서 생성
-# ----------------------------------------------------
-with tab3:
-    st.header("📄 출장자용 해외출장비 산정 내역서 생성")
-    st.markdown(
-        "규정 기준, 환율 적용 방식, 백원 단위 절사 내역이 상세히 포함된 개인별 산정 내역서입니다."
-    )
-
-    if len(st.session_state.travel_list) > 0:
-        processed_df = process_travel_data(st.session_state.travel_list)
-
-        selected_person = st.selectbox(
-            "내역서를 생성할 출장자를 선택하세요",
-            processed_df["출장자성명"].unique(),
-        )
-
-        person_data = processed_df[
-            processed_df["출장자성명"] == selected_person
-        ].iloc[0]
-
-        st.markdown("---")
-        st.markdown(f"### 👤 [ {selected_person} ] 님 해외출장비 산정 내역서")
-
-        det_c1, det_c2 = st.columns(2)
-        with det_c1:
-            st.info(
-                f"""
-            - **소속 부서**: {person_data.get('부서', '-')}
-            - **직급 / 직급 구분**: {person_data.get('직급', '-')} ({person_data.get('직급구분', '-')})
-            - **출장지**: {person_data.get('출장지', '-')} (지역: {person_data.get('지역구분', '-')}급)
-            """
-            )
-        with det_c2:
-            st.success(
-                f"""
-            - **출장 기간**: {person_data.get('출장시작일', '')} ~ {person_data.get('출장종료일', '')}
-            - **적용 환율**: {person_data.get('환율', 0):,.2f} 원 {'(엔화 100 환산 적용)' if person_data.get('지역구분')=='특' else ''}
-            - **직원 계좌 입금 총액**: {person_data.get('직원_계좌입금액', 0):,.0f} 원
-            """
-            )
-
-        hotel_display = (
-            f"{person_data.get('산정숙박_원화', 0):,.0f} 원"
-            if person_data.get("기준숙박_외화") != "실비"
-            else f"실비 정산 ({person_data.get('실비숙박_입력', 0):,.0f} 원)"
-        )
-        currency_unit = "엔(¥)" if person_data.get("지역구분") == "특" else "달러($)"
-
-        detail_table = pd.DataFrame(
-            {
-                "경비 항목": ["일비", "숙박비", "항공료 및 대행비"],
-                "규정 기준단가": [
-                    f"{person_data.get('기준일당_외화', 0):,d} {currency_unit}",
-                    (
-                        f"{person_data.get('기준숙박_외화', 0):,d} {currency_unit}"
-                        if person_data.get("기준숙박_외화") != "실비"
-                        else "실비"
-                    ),
-                    "실비 청구",
-                ],
-                "산정 금액 (원화)": [
-                    f"{person_data.get('산정일당_원화', 0):,.0f} 원",
-                    hotel_display,
-                    f"{person_data.get('여행사_지급액', 0):,.0f} 원",
-                ],
-                "지급처 및 비고": [
-                    "출장자 개인 계좌 입금 (백원 이하 절사)",
-                    "출장자 개인 계좌 입금 (백원 이하 절사)",
-                    "여행사 송금 지급",
-                ],
-            }
-        )
-        st.table(detail_table)
-
-        output_person = io.BytesIO()
-        with pd.ExcelWriter(output_person, engine="openpyxl") as writer:
-            pd.DataFrame([person_data]).to_excel(
-                writer, index=False, sheet_name="산정내역서"
-            )
-        output_person.seek(0)
-
-        st.download_button(
-            label=f"📥 [{selected_person}] 출장자용 산정 내역서 엑셀 다운로드",
-            data=output_person,
-            file_name=f"화천기공_해외출장산정내역서_{selected_person}.xlsx",
-            mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-        )
-    else:
-        st.warning(
-            "⚠️ 입력된 출장 정보가 없습니다. [1. 출장 정보 입력] 탭에서 데이터를 먼저 입력해 주세요."
-        )
-
+1. 보완점(Risk): 출발일과 도착일 입력 시 날짜 계산 로직이 정확히 작동하도록 날짜 형식을 엄격히 준수해야 합니다.
+2. 수정사항(Revision): 사용자가 설명한 '1. 계산 시트'의 수기 입력 프로세스와 '2. 자금팀연결용 시트'의 Y3:AK5 데이터 복사·붙여넣기 업무 흐름에 맞춰 웹 화면을 2개 탭으로 구조화했습니다.
+3. 진행여부(Next Step): 위 프로세스 반영 코드로 테스트해 보신 뒤, 엑셀 서식이나 추가 연동 항목에 대해 보완할 점이 있으신가요?

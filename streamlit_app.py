@@ -280,13 +280,12 @@ with tab1:
         )
 
     with col_b:
-        # 기본값: 출장 시작일은 내일, 종료일은 일주일 뒤(7일 뒤)
         default_start = datetime.date.today() + datetime.timedelta(days=1)
         default_end = default_start + datetime.timedelta(days=7)
 
         start_date = st.date_input("출장 시작일", value=default_start)
         end_date = st.date_input("출장 종료일", value=default_end)
-        country = st.text_input("출장지 (예: 베트남, 일본 등)")
+        country = st.text_input("출장지")
 
         auto_region = get_region_group(country) if country else "갑"
         region_options = ["갑", "을", "병", "특"]
@@ -540,7 +539,7 @@ with tab3:
                 ],
                 "산정 금액 (원화)": [
                     f"{person_data.get('산정일당_원화', 0):,.0f} 원",
-                    hotel_display,
+                    hotel_land := hotel_display,
                     f"{person_data.get('여행사_지급액', 0):,.0f} 원",
                 ],
                 "지급처 및 비고": [

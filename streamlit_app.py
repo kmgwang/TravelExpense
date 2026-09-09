@@ -44,13 +44,10 @@ def get_position_group(position):
 # 2. 국가별 지역 구분 매핑 함수
 def get_region_group(country):
     country = country.strip()
-    # 특: 일본
     if "일본" in country:
         return "특"
-    # 을: 중국
     elif "중국" in country:
         return "을"
-    # 병: 동남아, 서남아, 중앙아시아 등
     elif any(
         x in country
         for x in [
@@ -67,18 +64,15 @@ def get_region_group(country):
             "우즈베키스탄",
         ]
     ):
-        # 단, 싱가포르는 '갑' 지역 지정이므로 예외 처리
         if "싱가포르" in country:
             return "갑"
         return "병"
-    # 그 외 기본 '갑' (유럽, 미주, 중동, 아프리카, 오세아니아, 동유럽, 러시아, 홍콩, 대만, 싱가포르 등)
     else:
         return "갑"
 
 
-# 3. 규정 기준 단가 반환 함수 (달러/엔 기준)
+# 3. 규정 기준 단가 반환 함수
 def get_standard_rates(region, pos_group):
-    # (일당, 숙박비) - 단, 숙박비 '실비'는 특수 처리용으로 문자열 또는 별도 체크
     rates = {
         "갑": {
             "임원(부사장이상)": (135, "실비"),
@@ -117,7 +111,7 @@ def process_travel_data(data_list):
     for item in data_list:
         d = item.copy()
         pos_group = get_position_group(d["직급"])
-        region = get_region_group(d["출장국가"])
+        region = get_region_group(d["출장지"])
         std_daily, std_hotel = get_standard_rates(region, pos_group)
 
         d["직급구분"] = pos_group
@@ -125,40 +119,28 @@ def process_travel_data(data_list):
         d["기준일당_외화"] = std_daily
         d["기준숙박_외화"] = std_hotel
 
-        # 환율 적용 계산 (백원단위 이하 절사)
-        # '특' 지역(일본)은 엔화 환율에 100을 나눈 값 적용
         raw_rate = d["환율"]
         if region == "특":
             applied_rate = raw_rate / 100.0
         else:
             applied_rate = raw_rate
 
-        # 일당 원화 계산 (백원 이하 절사: // 100 * 100)
-        if region == "특":
-            calc_daily = std_daily * applied_rate
-        else:
-            calc_daily = std_daily * applied_rate
-
+        calc_daily = std_daily * applied_rate
         d["산정일당_원화"] = int(calc_daily // 100 * 100)
 
-        # 숙박비 계산 (실비 처리 또는 정액 계산)
         if std_hotel == "실비":
             calc_hotel = d.get("실비숙박_입력", 0)
         else:
             calc_hotel = std_hotel * applied_rate
         d["산정숙박_원화"] = int(calc_hotel // 100 * 100)
 
-        # 출장자 지급액 (일비 + 숙박비)
         d["직원_계좌입금액"] = d["산정일당_원화"] + d["산정숙박_원화"]
-
-        # 여행사 지급액 (항공권 + ESTA + 여행자보험 + 수수료 등)
         d["여행사_지급액"] = (
             d.get("항공료", 0)
             + d.get("ESTA기타", 0)
             + d.get("여행자보험", 0)
             + d.get("수수료", 0)
         )
-
         d["총출장비"] = d["직원_계좌입금액"] + d["여행사_지급액"]
         processed.append(d)
 
@@ -180,7 +162,7 @@ tab1, tab2, tab3 = st.tabs(
 with tab1:
     st.header("📋 해외출장 신청 및 경비 정보 입력")
     st.markdown(
-        "출장자 정보와 출장 국가, 직급을 입력하면 규정에 따른 일당과 숙박비가 자동 산정됩니다."
+        "출장자 정보와 출장지, 직급을 입력하면 규정에 따른 일당과 숙박비가 자동 산정됩니다."
     )
     st.markdown(
         "🔗 [서울외국환중개 환율 조회 사이트 바로가기](http://www.smbs.biz/ExRate/TodayExRate.jsp)"
@@ -193,7 +175,7 @@ with tab1:
             name = st.text_input("출장자 성명")
             department = st.text_input("부서", value="인사지원팀")
             position = st.selectbox(
-                "직급 선택",
+                "직급",
                 [
                     "사장",
                     "부사장",
@@ -210,13 +192,18 @@ with tab1:
                     "2급기능장",
                 ],
             )
-            account = st.text_input("계좌번호 (은행명 계좌번호)")
+            # 직급 구분 자동 표시 기능 (참고용)
+            preview_pos_group = get_position_group(position)
+            st.text_input(
+                "직급 구분",
+                value=preview_pos_group,
+                disabled=True,
+                help="선택한 직급에 따라 자동 판정됩니다.",
+            )
 
         with col_b:
             st.subheader("🌍 출장지 및 일정")
-            country = st.text_input(
-                "출장 국가 / 도시 (예: 미국, 일본, 베트남, 독일 등)"
-            )
+            country = st.text_input("출장지")
             start_date = st.date_input("출장 시작일")
             end_date = st.date_input("출장 종료일")
             exchange_rate = st.number_input(
@@ -261,16 +248,13 @@ with tab1:
 
         if submitted:
             if not name or not country:
-                st.error(
-                    "⚠️ 출장자 성명과 출장 국가는 필수 입력 항목입니다."
-                )
+                st.error("⚠️ 출장자 성명과 출장지는 필수 입력 항목입니다.")
             else:
                 new_data = {
                     "출장자성명": name,
                     "부서": department,
                     "직급": position,
-                    "계좌번호": account,
-                    "출장국가": country,
+                    "출장지": country,
                     "출장시작일": str(start_date),
                     "출장종료일": str(end_date),
                     "환율": exchange_rate,
@@ -327,14 +311,13 @@ with tab2:
         st.markdown("---")
         st.subheader("📑 자금팀 송금 요청 분리 집계표")
 
-        # 자금팀 전용 간소화 뷰 표 제공
         fund_view_df = processed_df[
             [
                 "출장자성명",
                 "부서",
                 "직급",
-                "출장국가",
-                "계좌번호",
+                "직급구분",
+                "출장지",
                 "직원_계좌입금액",
                 "여행사_지급액",
                 "총출장비",
@@ -344,15 +327,14 @@ with tab2:
             "성명",
             "부서",
             "직급",
-            "출장국가",
-            "직장인계좌번호",
+            "직급구분",
+            "출장지",
             "직원지급액(일비/숙박)",
             "여행사지급액(항공/보험등)",
             "총합계",
         ]
         st.dataframe(fund_view_df, use_container_width=True)
 
-        # 엑셀 다운로드 처리
         output_agency = io.BytesIO()
         with pd.ExcelWriter(output_agency, engine="openpyxl") as writer:
             processed_df.to_excel(
@@ -400,9 +382,8 @@ with tab3:
             st.info(
                 f"""
             - **소속 부서**: {person_data.get('부서', '-')}
-            - **직급 / 구분**: {person_data.get('직급', '-')} ({person_data.get('직급구분', '-')})
-            - **출장 국가**: {person_data.get('출장국가', '-')} (지역: {person_data.get('지역구분', '-')}급)
-            - **출장자 계좌**: {person_data.get('계좌번호', '-')}
+            - **직급 / 직급 구분**: {person_data.get('직급', '-')} ({person_data.get('직급구분', '-')})
+            - **출장지**: {person_data.get('출장지', '-')} (지역: {person_data.get('지역구분', '-')}급)
             """
             )
         with det_c2:
@@ -414,7 +395,6 @@ with tab3:
             """
             )
 
-        # 산정 기준 상세 테이블
         hotel_display = (
             f"{person_data.get('산정숙박_원화', 0):,.0f} 원"
             if person_data.get("기준숙박_외화") != "실비"
@@ -440,15 +420,14 @@ with tab3:
                     f"{person_data.get('여행사_지급액', 0):,.0f} 원",
                 ],
                 "지급처 및 비고": [
-                    "출장자 계좌 입금 (백원 이하 절사)",
-                    "출장자 계좌 입금 (백원 이하 절사)",
+                    "출장자 개인 계좌 입금 (백원 이하 절사)",
+                    "출장자 개인 계좌 입금 (백원 이하 절사)",
                     "여행사 송금 지급",
                 ],
             }
         )
         st.table(detail_table)
 
-        # 개인별 내역서 엑셀 다운로드
         output_person = io.BytesIO()
         with pd.ExcelWriter(output_person, engine="openpyxl") as writer:
             pd.DataFrame([person_data]).to_excel(
@@ -466,3 +445,7 @@ with tab3:
         st.warning(
             "⚠️ 입력된 출장 정보가 없습니다. [1. 출장 정보 입력] 탭에서 데이터를 먼저 입력해 주세요."
         )
+
+1. 보완점(Risk): 계좌번호 입력란이 삭제되었으므로 자금팀 송금 시 사내 인사/급여 마스터에 등록된 계좌 정보를 별도로 참고해야 합니다.
+2. 수정사항(Revision): '직급 선택'을 '직급'으로 변경하고, 계좌번호 입력을 삭제하였으며, 선택한 직급에 연동되는 '직급 구분' 필드를 추가하고, 출장지 항목을 명칭 변경하였습니다.
+3. 진행여부(Next Step): 위 수정사항이 모두 반영된 전체 코드로 테스트해 보신 뒤, 추가로 개선이 필요한 부분이 있으신가요?

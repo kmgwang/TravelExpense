@@ -40,10 +40,8 @@ st.markdown(
     unsafe_allow_html=True,
 )
 
-st.title("✈️ 화천기공 해외출장비 정산 및 내역서 자동 생성 시스템")
-st.markdown(
-    "인사지원팀 해외출장 경비 산정, 자금팀 제출용 정산표 분리, 출장자용 산정 내역서 자동 생성 프로그램입니다."
-)
+st.title("✈️ 해외출장비 정산 및 자료 생성 시스템")
+
 st.markdown("---")
 
 # 세션 스테이트 초기화 (기본 데이터 구성)
@@ -297,7 +295,7 @@ with tab1:
         "기타",
     ]
 
-    st.subheader("👤 출장자 정보 및 🌍 출장지 일정 설정")
+    st.subheader("🌍 출장 정보 입력")
     col_a, col_b = st.columns(2)
 
     with col_a:
@@ -422,7 +420,7 @@ with tab1:
         )
     with th3:
         st.markdown(
-            "<div style='text-align: center;'><b>금액 (천원단위 콤마 표시)</b></div>",
+            "<div style='text-align: center;'><b>금액</b></div>",
             unsafe_allow_html=True,
         )
     with th4:

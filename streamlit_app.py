@@ -110,12 +110,10 @@ def process_travel_data(data_list):
     processed = []
     for item in data_list:
         d = item.copy()
-        pos_group = get_position_group(d["직급"])
-        region = get_region_group(d["출장지"])
+        pos_group = d["직급구분"]  # 사용자가 지정/수정한 직급구분 반영
+        region = d["지역구분"]  # 사용자가 지정/수정한 지역구분 반영
         std_daily, std_hotel = get_standard_rates(region, pos_group)
 
-        d["직급구분"] = pos_group
-        d["지역구분"] = region
         d["기준일당_외화"] = std_daily
         d["기준숙박_외화"] = std_hotel
 
@@ -176,55 +174,73 @@ with tab1:
             "적용 환율 입력", min_value=0.0, value=1350.0, step=1.0
         )
 
-    with st.form("travel_input_form"):
-        col_a, col_b = st.columns(2)
-        with col_a:
-            st.subheader("👤 출장자 정보")
-            name = st.text_input("출장자 성명")
-            department = st.text_input("부서", value="인사지원팀")
-            position = st.selectbox(
-                "직급",
-                [
-                    "사장",
-                    "부사장",
-                    "전무",
-                    "상무",
-                    "이사",
-                    "부장",
-                    "차장",
-                    "과장",
-                    "대리",
-                    "계장",
-                    "사원",
-                    "1급기능장",
-                    "2급기능장",
-                ],
-            )
-            # 1. 입력한 직급에 맞게 직급 구분이 자동으로 반영되도록 수정
-            preview_pos_group = get_position_group(position)
-            st.text_input(
-                "직급 구분",
-                value=preview_pos_group,
-                disabled=True,
-                help="선택한 직급에 따라 자동 판정됩니다.",
-            )
+    # 폼 외부에서 입력을 받아 실시간 자동 매핑 결과를 selectbox에 반영
+    col_a, col_b = st.columns(2)
+    with col_a:
+        st.subheader("👤 출장자 정보")
+        name = st.text_input("출장자 성명")
+        department = st.text_input("부서", value="인사지원팀")
+        position = st.selectbox(
+            "직급",
+            [
+                "사장",
+                "부사장",
+                "전무",
+                "상무",
+                "이사",
+                "부장",
+                "차장",
+                "과장",
+                "대리",
+                "계장",
+                "사원",
+                "1급기능장",
+                "2급기능장",
+            ],
+        )
 
-        with col_b:
-            st.subheader("🌍 출장지 및 일정")
-            # 2. 출장 시작일, 종료일을 위로 올리고 출장지 및 지역 구분 배치
-            start_date = st.date_input("출장 시작일")
-            end_date = st.date_input("출장 종료일")
-            country = st.text_input("출장지 (예: 베트남, 일본 등)")
+        # 직급에 따른 자동 추천 값 계산 후 수동 선택 가능하도록 selectbox 배치
+        auto_pos_group = get_position_group(position)
+        pos_group_options = [
+            "임원(부사장이상)",
+            "임원",
+            "1급",
+            "2급",
+            "3급이하",
+        ]
+        default_pos_idx = (
+            pos_group_options.index(auto_pos_group)
+            if auto_pos_group in pos_group_options
+            else 4
+        )
+        position_group = st.selectbox(
+            "직급 구분 (자동 판정 및 수정 가능)",
+            pos_group_options,
+            index=default_pos_idx,
+        )
 
-            preview_region_group = get_region_group(country) if country else "-"
-            st.text_input(
-                "지역 구분",
-                value=preview_region_group,
-                disabled=True,
-                help="출장지에 따라 자동으로 판정됩니다 (갑/을/병/특).",
-            )
+    with col_b:
+        st.subheader("🌍 출장지 및 일정")
+        start_date = st.date_input("출장 시작일")
+        end_date = st.date_input("출장 종료일")
+        country = st.text_input("출장지 (예: 베트남, 일본 등)")
 
-        st.markdown("---")
+        # 출장지에 따른 자동 추천 값 계산 후 수동 선택 가능하도록 selectbox 배치
+        auto_region = get_region_group(country) if country else "갑"
+        region_options = ["갑", "을", "병", "특"]
+        default_reg_idx = (
+            region_options.index(auto_region)
+            if auto_region in region_options
+            else 0
+        )
+        region_group = st.selectbox(
+            "지역 구분 (자동 판정 및 수정 가능)",
+            region_options,
+            index=default_reg_idx,
+        )
+
+    st.markdown("---")
+    with st.form("travel_input_sub_form"):
         st.subheader("💵 실비 및 여행사 대행 경비 입력 (원화)")
         col_c, col_d = st.columns(2)
         with col_c:
@@ -265,7 +281,9 @@ with tab1:
                     "출장자성명": name,
                     "부서": department,
                     "직급": position,
+                    "직급구분": position_group,
                     "출장지": country,
+                    "지역구분": region_group,
                     "출장시작일": str(start_date),
                     "출장종료일": str(end_date),
                     "환율": exchange_rate,
@@ -329,6 +347,7 @@ with tab2:
                 "직급",
                 "직급구분",
                 "출장지",
+                "지역구분",
                 "직원_계좌입금액",
                 "여행사_지급액",
                 "총출장비",
@@ -340,6 +359,7 @@ with tab2:
             "직급",
             "직급구분",
             "출장지",
+            "지역구분",
             "직원지급액(일비/숙박)",
             "여행사지급액(항공/보험등)",
             "총합계",

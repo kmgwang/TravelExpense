@@ -128,23 +128,72 @@ def process_travel_data(data_list):
         else:
             applied_rate = raw_rate
 
-        calc_daily = std_daily * applied_rate * d.get("출장일수", 1)
-        d["산정일당_원화"] = int(calc_daily // 100 * 100)
+        # 일당 산정 (수정 입력값 우선 반영, 없으면 규정 산정)
+        user_daily = d.get("일당_입력값", 0)
+        if user_daily > 0:
+            calc_daily = user_daily
+        else:
+            calc_daily = std_daily * applied_rate * d.get("출장일수", 1)
+            calc_daily = int(calc_daily // 100 * 100)
+        d["산정일당_원화"] = calc_daily
 
-        if std_hotel == "실비":
-            calc_hotel = d.get("실비숙박_입력", 0)
+        # 숙박비 산정 (사용자 입력값 우선 반영, 없으면 규정 산정)
+        user_hotel = d.get("실비숙박_입력", 0)
+        if user_hotel > 0:
+            calc_hotel = user_hotel
+        elif std_hotel == "실비":
+            calc_hotel = 0
         else:
             calc_hotel = std_hotel * applied_rate * d.get("출장박수", 0)
-        d["산정숙박_원화"] = int(calc_hotel // 100 * 100)
+            calc_hotel = int(calc_hotel // 100 * 100)
+        d["산정숙박_원화"] = calc_hotel
 
-        d["직원_계좌입금액"] = d["산정일당_원화"] + d["산정숙박_원화"]
+        # 지급처별 금액 분리 집계
+        agency_total = 0
+        employee_total = 0
 
-        # 기본 대행비 및 동적 기타 항목 합산
-        base_agency = d.get("항공료", 0) + d.get("ESTA기타", 0)
-        other_total = sum([row.get("amount", 0) for row in d.get("기타항목리스트", [])])
-        d["여행사_지급액"] = base_agency + other_total
+        # 항공권
+        f_amt = d.get("항공료", 0)
+        f_payer = d.get("항공료_지급처", "여행사")
+        if f_payer == "여행사":
+            agency_total += f_amt
+        else:
+            employee_total += f_amt
 
-        d["총출장비"] = d["직원_계좌입금액"] + d["여행사_지급액"]
+        # ESTA
+        e_amt = d.get("ESTA기타", 0)
+        e_payer = d.get("ESTA_지급처", "여행사")
+        if e_payer == "여행사":
+            agency_total += e_amt
+        else:
+            employee_total += e_amt
+
+        # 숙박비
+        h_payer = d.get("숙박비_지급처", "출장자")
+        if h_payer == "여행사":
+            agency_total += calc_hotel
+        else:
+            employee_total += calc_hotel
+
+        # 일당
+        d_payer = d.get("일당_지급처", "출장자")
+        if d_payer == "여행사":
+            agency_total += calc_daily
+        else:
+            employee_total += calc_daily
+
+        # 기타 항목들
+        for other in d.get("기타항목리스트", []):
+            o_amt = other.get("amount", 0)
+            o_payer = other.get("payer", "여행사")
+            if o_payer == "여행사":
+                agency_total += o_amt
+            else:
+                employee_total += o_amt
+
+        d["직원_계좌입금액"] = employee_total
+        d["여행사_지급액"] = agency_total
+        d["총출장비"] = employee_total + agency_total
         processed.append(d)
 
     return pd.DataFrame(processed)
@@ -347,37 +396,37 @@ with tab1:
 
         payer_options = ["여행사", "출장자", "직접입력"]
 
-        # --- 교통비 섹션 (2행 셀 병합 느낌 표현) ---
+        # --- 교통비 섹션 (구분 셀 수평 정렬) ---
         r1_c1, r1_c2, r1_c3, r1_c4 = st.columns([1.2, 1.5, 2, 1.5])
         with r1_c1:
             st.markdown("### 교통비")
         with r1_c2:
             flight_item_name = st.text_input(
-                "교통비 항목 1", value="항공권", label_visibility="collapsed"
+                "교통비 항목 1", value="항공권", key="f_item", label_visibility="collapsed"
             )
         with r1_c3:
             flight_str = st.text_input(
-                "항공권 금액", value="0", label_visibility="collapsed"
+                "항공권 금액", value="0", key="f_amt", label_visibility="collapsed"
             )
         with r1_c4:
             flight_payer = st.selectbox(
-                "항공권 지급처", payer_options, index=0, key="flight_p"
+                "항공권 지급처", payer_options, index=0, key="flight_p", label_visibility="collapsed"
             )
 
         r2_c1, r2_c2, r2_c3, r2_c4 = st.columns([1.2, 1.5, 2, 1.5])
         with r2_c1:
-            st.markdown("")  # 병합 영역 공백
+            st.markdown("")  
         with r2_c2:
             esta_item_name = st.text_input(
-                "교통비 항목 2", value="ESTA", label_visibility="collapsed"
+                "교통비 항목 2", value="ESTA", key="e_item", label_visibility="collapsed"
             )
         with r2_c3:
             esta_str = st.text_input(
-                "ESTA 금액", value="0", label_visibility="collapsed"
+                "ESTA 금액", value="0", key="e_amt", label_visibility="collapsed"
             )
         with r2_c4:
             esta_payer = st.selectbox(
-                "ESTA 지급처", payer_options, index=0, key="esta_p"
+                "ESTA 지급처", payer_options, index=0, key="esta_p", label_visibility="collapsed"
             )
 
         st.markdown("---")
@@ -388,36 +437,37 @@ with tab1:
             st.markdown("### 출장비")
         with r3_c2:
             hotel_item_name = st.text_input(
-                "출장비 항목 1", value="숙박비", label_visibility="collapsed"
+                "출장비 항목 1", value="숙박비", key="h_item", label_visibility="collapsed"
             )
         with r3_c3:
             hotel_str = st.text_input(
-                "숙박비 금액", value="0", label_visibility="collapsed"
+                "숙박비 금액", value="0", key="h_amt", label_visibility="collapsed"
             )
         with r3_c4:
             hotel_payer = st.selectbox(
-                "숙박비 지급처", payer_options, index=1, key="hotel_p"
+                "숙박비 지급처", payer_options, index=1, key="hotel_p", label_visibility="collapsed"
             )
 
         r4_c1, r4_c2, r4_c3, r4_c4 = st.columns([1.2, 1.5, 2, 1.5])
         with r4_c1:
-            st.markdown("")  # 병합 영역 공백
+            st.markdown("")  
         with r4_c2:
             daily_item_name = st.text_input(
-                "출장비 항목 2", value="일당", label_visibility="collapsed"
+                "출장비 항목 2", value="일당", key="d_item", label_visibility="collapsed"
             )
         with r4_c3:
-            st.markdown("_규정 자동산정_")
+            daily_str = st.text_input(
+                "일당 금액", value="0", key="d_amt", label_visibility="collapsed"
+            )
         with r4_c4:
-            st.markdown("출장자")
+            daily_payer = st.selectbox(
+                "일당 지급처", payer_options, index=1, key="daily_p", label_visibility="collapsed"
+            )
 
         st.markdown("---")
 
-        # --- 기타 섹션 (동적 추가/제거 가능) ---
+        # --- 기타 섹션 (동적 추가/제거 가능, 안내 문구 삭제) ---
         st.markdown("### 기타")
-        st.markdown(
-            "필요에 따라 기타 행을 자유롭게 추가하거나 제거할 수 있습니다."
-        )
 
         updated_other_rows = []
         for idx, row_data in enumerate(st.session_state.other_rows):
@@ -440,7 +490,6 @@ with tab1:
                     label_visibility="collapsed",
                 )
             with oc4:
-                # 안전한 인덱스 선택
                 p_idx = (
                     payer_options.index(row_data["payer"])
                     if row_data["payer"] in payer_options
@@ -451,9 +500,9 @@ with tab1:
                     payer_options,
                     index=p_idx,
                     key=f"other_payer_{idx}",
+                    label_visibility="collapsed",
                 )
 
-            # 값 변환 저장
             try:
                 parsed_amt = int(it_amt_str.replace(",", ""))
             except ValueError:
@@ -489,7 +538,6 @@ with tab1:
             if not name or not country:
                 st.error("⚠️ 출장자 성명과 출장지는 필수 입력 항목입니다.")
             else:
-                # 문자열 금액 안전 변환
                 try:
                     flight_val = int(flight_str.replace(",", ""))
                 except ValueError:
@@ -505,6 +553,11 @@ with tab1:
                 except ValueError:
                     hotel_val = 0
 
+                try:
+                    daily_val = int(daily_str.replace(",", ""))
+                except ValueError:
+                    daily_val = 0
+
                 new_data = {
                     "출장자성명": name,
                     "부서": department,
@@ -518,8 +571,13 @@ with tab1:
                     "출장박수": calculated_nights,
                     "환율": exchange_rate,
                     "항공료": flight_val,
+                    "항공료_지급처": flight_payer,
                     "ESTA기타": esta_val,
+                    "ESTA_지급처": esta_payer,
                     "실비숙박_입력": hotel_val,
+                    "숙박비_지급처": hotel_payer,
+                    "일당_입력값": daily_val,
+                    "일당_지급처": daily_payer,
                     "기타항목리스트": st.session_state.other_rows.copy(),
                 }
                 st.session_state.travel_list.append(new_data)
@@ -542,7 +600,7 @@ with tab1:
 with tab2:
     st.header("💰 자금팀 제출용 정산 집계표 생성")
     st.markdown(
-        "출장자에게 송금할 금액(일비+숙박비)과 여행사에 송금할 금액 등이 완벽히 분리된 자금팀 제출용 표입니다."
+        "출장자에게 송금할 금액과 여행사에 송금할 금액 등이 완벽히 분리된 자금팀 제출용 표입니다."
     )
 
     if len(st.session_state.travel_list) > 0:
@@ -593,8 +651,8 @@ with tab2:
             "지역구분",
             "출장일수",
             "출장박수",
-            "직원지급액(일비/숙박)",
-            "여행사지급액(항공/보험등)",
+            "직원지급액",
+            "여행사지급액",
             "총합계",
         ]
         st.dataframe(fund_view_df, use_container_width=True)
@@ -659,11 +717,7 @@ with tab3:
             """
             )
 
-        hotel_display = (
-            f"{person_data.get('산정숙박_원화', 0):,.0f} 원"
-            if person_data.get("기준숙박_외화") != "실비"
-            else f"실비 정산 ({person_data.get('실비숙박_입력', 0):,.0f} 원)"
-        )
+        hotel_display = f"{person_data.get('산정숙박_원화', 0):,.0f} 원"
         currency_unit = "엔(¥)" if person_data.get("지역구분") == "특" else "달러($)"
 
         detail_table = pd.DataFrame(
@@ -671,15 +725,11 @@ with tab3:
                 "경비 항목": [
                     f"일비 ({person_data.get('출장일수', 0)}일)",
                     f"숙박비 ({person_data.get('출장박수', 0)}박)",
-                    "항공료 및 대행비",
+                    "대행 및 기타 경비",
                 ],
                 "규정 기준단가": [
                     f"{person_data.get('기준일당_외화', 0):,d} {currency_unit}/일",
-                    (
-                        f"{person_data.get('기준숙박_외화', 0):,d} {currency_unit}/박"
-                        if person_data.get("기준숙박_외화") != "실비"
-                        else "실비"
-                    ),
+                    f"{person_data.get('기준숙박_외화', 0):,d} {currency_unit}/박" if person_data.get("기준숙박_외화") != "실비" else "실비",
                     "실비 청구",
                 ],
                 "산정 금액 (원화)": [
@@ -688,9 +738,9 @@ with tab3:
                     f"{person_data.get('여행사_지급액', 0):,.0f} 원",
                 ],
                 "지급처 및 비고": [
-                    "출장자 개인 계좌 입금 (백원 이하 절사)",
-                    "출장자 개인 계좌 입금 (백원 이하 절사)",
-                    "여행사 송금 지급",
+                    "지급처 설정 반영",
+                    "지급처 설정 반영",
+                    "지급처 설정 반영",
                 ],
             }
         )

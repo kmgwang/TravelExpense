@@ -230,7 +230,7 @@ tab1, tab2, tab3 = st.tabs(
 with tab1:
     st.header("📋 해외출장 신청 및 경비 정보 입력")
     st.markdown(
-        "출장자 정보와 출장지, 직급을 입력하면 규정에 따른 일당과 숙박비가 자동 산정됩니다."
+        "출장자 정보와 출장지, 직급을 입력하면 규정에 따른 일당과 숙박비가 자동 산정되며, 직접 수정도 가능합니다."
     )
 
     col_rate_info, col_rate_input = st.columns([2, 1])
@@ -401,6 +401,21 @@ with tab1:
             (std_hotel * applied_rate * calculated_nights) // 1000 * 1000
         )
 
+    # 조건 변경 시 자동 계산값을 입력란 상태에 반영 (사용자가 직접 수정한 값은 유지되도록 처리)
+    if (
+        "prev_auto_calc_hotel" not in st.session_state
+        or st.session_state.prev_auto_calc_hotel != auto_calc_hotel
+    ):
+        st.session_state.prev_auto_calc_hotel = auto_calc_hotel
+        st.session_state["te_amt_str_0"] = f"{auto_calc_hotel:,}"
+
+    if (
+        "prev_auto_calc_daily" not in st.session_state
+        or st.session_state.prev_auto_calc_daily != auto_calc_daily
+    ):
+        st.session_state.prev_auto_calc_daily = auto_calc_daily
+        st.session_state["te_amt_str_1"] = f"{auto_calc_daily:,}"
+
     st.markdown("---")
     st.subheader("💵 금액 입력")
     st.markdown("<br>", unsafe_allow_html=True)
@@ -513,10 +528,7 @@ with tab1:
 
     st.markdown("---")
 
-    # --- 2. 출장비 섹션 (숙박비, 일당 자동계산 반영 - 백단위 절사) ---
-    st.session_state.travel_exp_rows[0]["amount"] = auto_calc_hotel
-    st.session_state.travel_exp_rows[1]["amount"] = auto_calc_daily
-
+    # --- 2. 출장비 섹션 (숙박비, 일당 자동계산 및 수동 수정 가능) ---
     updated_travel_exp_rows = []
     travel_exp_sum = 0
     for idx, row_data in enumerate(st.session_state.travel_exp_rows):
@@ -534,12 +546,26 @@ with tab1:
                 label_visibility="collapsed",
             )
         with tec3:
-            # 숙박비/일당은 규정값으로 자동 세팅되므로 금액 입력란은 비활성화(disabled) 또는 자동 표시로 고정
-            st.markdown(
-                f"<div style='display: flex; align-items: center; height: 45px; justify-content: flex-end;'><b>{row_data['amount']:,.0f} 원</b></div>",
-                unsafe_allow_html=True,
+            key_prefix = f"te_amt_str_{idx}"
+
+            def make_on_change_te(k):
+                def callback():
+                    val = st.session_state[k]
+                    digits = "".join(filter(str.isdigit, val))
+                    st.session_state[k] = (
+                        f"{int(digits):,}" if digits else "0"
+                    )
+
+                return callback
+
+            amt_str = st.text_input(
+                f"출장비 금액 {idx}",
+                key=key_prefix,
+                on_change=make_on_change_te(key_prefix),
+                label_visibility="collapsed",
             )
-            te_amt = row_data["amount"]
+            digits = "".join(filter(str.isdigit, amt_str))
+            te_amt = int((int(digits or 0) // 1000) * 1000)
         with tec4:
             p_idx = (
                 payer_options.index(row_data["payer"])

@@ -22,7 +22,6 @@ st.markdown(
     input[aria-label*="금액"] {
         text-align: right !important;
     }
-    /* 총계 및 총액 행 배경을 셀 전체로 확장하기 위한 스타일 */
     .row-highlight-yellow {
         background-color: #fff9c4;
         padding: 8px 12px;
@@ -40,8 +39,10 @@ st.markdown(
     unsafe_allow_html=True,
 )
 
-st.title("✈️ 해외출장비 계산 프로그램")
-
+st.title("✈️ 화천기공 해외출장비 정산 및 내역서 자동 생성 시스템")
+st.markdown(
+    "인사지원팀 해외출장 경비 산정, 자금팀 제출용 정산표 분리, 출장자용 산정 내역서 자동 생성 프로그램입니다."
+)
 st.markdown("---")
 
 # 세션 스테이트 초기화 (기본 데이터 구성)
@@ -295,7 +296,7 @@ with tab1:
         "기타",
     ]
 
-    st.subheader("🌍 출장 정보 입력")
+    st.subheader("👤 출장자 정보 및 🌍 출장지 일정 설정")
     col_a, col_b = st.columns(2)
 
     with col_a:
@@ -420,7 +421,7 @@ with tab1:
         )
     with th3:
         st.markdown(
-            "<div style='text-align: center;'><b>금액</b></div>",
+            "<div style='text-align: center;'><b>금액 (천원단위 콤마 표시)</b></div>",
             unsafe_allow_html=True,
         )
     with th4:
@@ -533,27 +534,12 @@ with tab1:
                 label_visibility="collapsed",
             )
         with tec3:
-            key_prefix = f"te_amt_str_{idx}"
-            st.session_state[key_prefix] = f"{int(row_data['amount']):,}"
-
-            def make_on_change_te(k):
-                def callback():
-                    val = st.session_state[k]
-                    digits = "".join(filter(str.isdigit, val))
-                    st.session_state[k] = (
-                        f"{int(digits):,}" if digits else "0"
-                    )
-
-                return callback
-
-            amt_str = st.text_input(
-                f"출장비 금액 {idx}",
-                key=key_prefix,
-                on_change=make_on_change_te(key_prefix),
-                label_visibility="collapsed",
+            # 숙박비/일당은 규정값으로 자동 세팅되므로 금액 입력란은 비활성화(disabled) 또는 자동 표시로 고정
+            st.markdown(
+                f"<div style='display: flex; align-items: center; height: 45px; justify-content: flex-end;'><b>{row_data['amount']:,.0f} 원</b></div>",
+                unsafe_allow_html=True,
             )
-            digits = "".join(filter(str.isdigit, amt_str))
-            te_amt = int((int(digits or 0) // 1000) * 1000)
+            te_amt = row_data["amount"]
         with tec4:
             p_idx = (
                 payer_options.index(row_data["payer"])

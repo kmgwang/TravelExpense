@@ -229,7 +229,7 @@ with tab1:
         "기타",
     ]
 
-    st.subheader("👤 출장자 정보 및 🌍 출장지 일정 설정")
+    st.subheader("👤 출장자 정보        🌍 출장지 일정 설정")
     col_a, col_b = st.columns(2)
 
     with col_a:

@@ -22,7 +22,6 @@ st.set_page_config(
 # 숫자 입력 필드의 스핀박스 완전 제거 및 테이블/입력 필드 스타일 설정 CSS
 st.markdown("""
 <style>
-/* 숫자 input 스핀박스 제거 (+, - 버튼 및 브라우저 기본 스핀박스 숨김) */
 input[type=number]::-webkit-inner-spin-button, 
 input[type=number]::-webkit-outer-spin-button { 
     -webkit-appearance: none; 
@@ -31,7 +30,6 @@ input[type=number]::-webkit-outer-spin-button {
 input[type=number] {
     -moz-appearance: textfield;
 }
-/* 입력 필드 및 텍스트 가운데 정렬 */
 .stTextInput input, .stNumberInput input, .stSelectbox div[data-baseweb="select"] {
     text-align: center !important;
 }
@@ -133,12 +131,7 @@ def get_region_by_location(loc):
         return "병"
     return ""
 
-def calculate_row_expenses(row, main_rate):
-    region = str(row.get("지역구분", ""))
-    rank = str(row.get("직급구분", ""))
-    days = int(row.get("출장일수", 1))
-    nights = int(row.get("숙박일수", 0))
-
+def calculate_row_expenses(region, rank, days, nights, main_rate):
     rule = RULES_TABLE.get((region, rank), {"daily": 60, "hotel": 90, "curr": "USD"})
     daily_std = rule["daily"]
     hotel_std = rule["hotel"]
@@ -161,8 +154,10 @@ def calculate_expenses_df(df, main_rate):
     for _, row in df.iterrows():
         days = int(row.get("출장일수", 1))
         nights = int(row.get("숙박일수", 0))
+        region = str(row.get("지역구분", ""))
+        rank = str(row.get("직급구분", ""))
         
-        d_calc, h_calc = calculate_row_expenses(row, main_rate)
+        d_calc, h_calc = calculate_row_expenses(region, rank, days, nights, main_rate)
         daily_krw = float(row.get("일당_KRW", d_calc)) if pd.notnull(row.get("일당_KRW")) else d_calc
         hotel_krw = float(row.get("숙박비_KRW", h_calc)) if pd.notnull(row.get("숙박비_KRW")) else h_calc
         
@@ -207,7 +202,7 @@ with st.container():
         main_rate = st.number_input("💱 메인 적용 환율 (USD/JPY 기준)", value=1415.30, step=0.01, format="%.2f")
     with col_r2:
         st.markdown("<br>", unsafe_allow_html=True)
-        st.markdown(f"🔗 [서울외국환중개 환율조회 사이트 바로가기](http://www.smbs.biz/ExRate/TodayExRate.jsp)", unsafe_allow_html=True)
+        st.markdown("🔗 [서울외국환중개 환율조회 사이트 바로가기](http://www.smbs.biz/ExRate/TodayExRate.jsp)", unsafe_allow_html=True)
 
 st.markdown("---")
 
@@ -218,207 +213,211 @@ tab1, tab2, tab3 = st.tabs([
 ])
 
 # ----------------------------------------------------
-# 탭 1: 출장자 정보 직접 입력
+# 탭 1: 출장자 정보 직접 입력 (실시간 매핑 구조)
 # ----------------------------------------------------
 with tab1:
     st.subheader("📝 출장자 정보 등록 및 관리")
     
-    with st.form("traveler_form", clear_on_submit=False, enter_to_submit=False):
-        c1, c2 = st.columns(2)
-        with c1:
-            dep = st.selectbox("부서", DEPARTMENTS)
-            name = st.text_input("성명", placeholder="성명을 입력하세요")
-        with c2:
-            date_start = st.date_input("출발일", value=datetime.today())
-            date_end = st.date_input("도착일", value=datetime.today() + timedelta(days=4))
-            flight_night = st.checkbox("기내 박 적용 (숙박 1박 차감)")
+    c1, c2 = st.columns(2)
+    with c1:
+        dep = st.selectbox("부서", DEPARTMENTS, key="input_dep")
+        name = st.text_input("성명", placeholder="성명을 입력하세요", key="input_name")
+    with c2:
+        date_start = st.date_input("출발일", value=datetime.today(), key="input_start")
+        date_end = st.date_input("도착일", value=datetime.today() + timedelta(days=4), key="input_end")
+        flight_night = st.checkbox("기내 박 적용 (숙박 1박 차감)", key="input_flight_night")
 
-        c3, c4 = st.columns(2)
-        with c3:
-            position = st.selectbox("직급", [""] + list(POSITION_MAPPING.keys()))
-            auto_rank = POSITION_MAPPING.get(position, "")
-            rank = st.selectbox("직급구분", ["", "3급이하", "2급", "1급", "임원", "임원(부사장이상)"], 
-                                index=["", "3급이하", "2급", "1급", "임원", "임원(부사장이상)"].index(auto_rank) if auto_rank in ["", "3급이하", "2급", "1급", "임원", "임원(부사장이상)"] else 0)
-        with c4:
-            location = st.text_input("출장지", placeholder="예: 미국 로스앤젤레스, 일본 도쿄")
-            auto_reg = get_region_by_location(location)
-            region = st.selectbox("지역구분", ["", "갑", "을", "병", "특"], 
-                                index=["", "갑", "을", "병", "특"].index(auto_reg) if auto_reg in ["", "갑", "을", "병", "특"] else 0)
+    # 직급 및 출장지 입력에 따른 실시간 자동 연동 처리
+    position_list = [""] + list(POSITION_MAPPING.keys())
+    position = st.selectbox("직급", position_list, key="input_position")
+    auto_rank = POSITION_MAPPING.get(position, "")
 
-        st.markdown("##### 💰 경비 항목 입력")
-        
-        temp_days = max(1, (date_end - date_start).days + 1)
-        temp_nights = max(0, temp_days - 1)
-        if flight_night:
-            temp_nights = max(0, temp_nights - 1)
-        
-        dummy_row = {"지역구분": region if region else auto_reg, "직급구분": rank if rank else auto_rank, "출장일수": temp_days, "숙박일수": temp_nights}
-        calc_d_init, calc_h_init = calculate_row_expenses(dummy_row, main_rate)
+    location = st.text_input("출장지", placeholder="예: 미국 로스앤젤레스, 일본 도쿄", key="input_location")
+    auto_reg = get_region_by_location(location)
 
-        st.markdown("###### ⚙️ 기타 경비 항목 관리")
-        etc_col_a, etc_col_b = st.columns([3, 1])
-        with etc_col_a:
-            new_etc_name = st.text_input("추가할 기타 항목명", placeholder="예: 비자발급비, 통신비 등", label_visibility="collapsed")
-        with etc_col_b:
-            if st.form_submit_button("기타 항목 추가"):
-                if new_etc_name.strip():
-                    st.session_state.custom_etc_items.append({"name": new_etc_name.strip(), "amount": 0, "pay": "여행사"})
-                    st.rerun()
+    c3, c4 = st.columns(2)
+    with c3:
+        rank_options = ["", "3급이하", "2급", "1급", "임원", "임원(부사장이상)"]
+        default_rank_idx = rank_options.index(auto_rank) if auto_rank in rank_options else 0
+        rank = st.selectbox("직급구분 (자동매핑/수정가능)", rank_options, index=default_rank_idx, key="input_rank")
+    with c4:
+        region_options = ["", "갑", "을", "병", "특"]
+        default_reg_idx = region_options.index(auto_reg) if auto_reg in region_options else 0
+        region = st.selectbox("지역구분 (자동매핑/수정가능)", region_options, index=default_reg_idx, key="input_region")
 
-        table_html = """
-        <style>
-        .custom-expense-table {
-            width: 100%;
-            border-collapse: collapse;
-            margin-top: 10px;
-            margin-bottom: 10px;
-            font-size: 14px;
-            text-align: center;
-            font-family: inherit;
-        }
-        .custom-expense-table th, .custom-expense-table td {
-            border: 1px solid #cbd5e1;
-            padding: 8px;
-            text-align: center;
-            vertical-align: middle;
-        }
-        .custom-expense-table th {
-            background-color: #f1f5f9;
-            font-weight: bold;
-            color: #1e293b;
-        }
-        .custom-expense-table tr:nth-child(even) {
-            background-color: #f8fafc;
-        }
-        .custom-expense-table tr:nth-child(odd) {
-            background-color: #ffffff;
-        }
-        .total-row {
-            background-color: #fef08a !important;
-            font-weight: bold;
-        }
-        </style>
-        <table class="custom-expense-table">
-            <thead>
-                <tr>
-                    <th style="width: 15%;">대분류</th>
-                    <th style="width: 20%;">소분류</th>
-                    <th style="width: 20%;">지급처</th>
-                    <th style="width: 25%;">금액 (KRW)</th>
-                    <th style="width: 20%;">비고</th>
-                </tr>
-            </thead>
-            <tbody>
-        """
-        st.markdown(table_html, unsafe_allow_html=True)
+    st.markdown("##### 💰 경비 항목 입력")
+    
+    temp_days = max(1, (date_end - date_start).days + 1)
+    temp_nights = max(0, temp_days - 1)
+    if flight_night:
+        temp_nights = max(0, temp_nights - 1)
+    
+    final_region_calc = region if region else auto_reg
+    final_rank_calc = rank if rank else auto_rank
+    calc_d_init, calc_h_init = calculate_row_expenses(final_region_calc, final_rank_calc, temp_days, temp_nights, main_rate)
 
-        col_t1, col_t2, col_t3, col_t4, col_t5 = st.columns([1.5, 2.0, 2.0, 2.5, 2.0])
-        with col_t1: st.markdown("교통비")
-        with col_t2: st.markdown("항공권")
-        with col_t3: air_pay = st.selectbox("항공권 지급처", ["여행사", "출장자"], index=0, key="air_pay_sel", label_visibility="collapsed")
-        with col_t4: air_krw = st.number_input("항공권 금액", value=0, step=None, format="%d", key="air_val", label_visibility="collapsed")
-        with col_t5: st.markdown("-")
+    st.markdown("###### ⚙️ 기타 경비 항목 관리")
+    etc_col_a, etc_col_b = st.columns([3, 1])
+    with etc_col_a:
+        new_etc_name = st.text_input("추가할 기타 항목명", placeholder="예: 비자발급비, 통신비 등", label_visibility="collapsed", key="new_etc_input")
+    with etc_col_b:
+        if st.button("기타 항목 추가", key="add_etc_btn"):
+            if new_etc_name.strip():
+                st.session_state.custom_etc_items.append({"name": new_etc_name.strip(), "amount": 0, "pay": "여행사"})
+                st.rerun()
 
-        col_e1, col_e2, col_e3, col_e4, col_e5 = st.columns([1.5, 2.0, 2.0, 2.5, 2.0])
-        with col_e1: st.markdown("")
-        with col_e2: st.markdown("ESTA")
-        with col_e3: esta_pay = st.selectbox("ESTA 지급처", ["여행사", "출장자"], index=0, key="esta_pay_sel", label_visibility="collapsed")
-        with col_e4: esta_krw = st.number_input("ESTA 금액", value=0, step=None, format="%d", key="esta_val", label_visibility="collapsed")
-        with col_e5: st.markdown("-")
-
-        col_h1, col_h2, col_h3, col_h4, col_h5 = st.columns([1.5, 2.0, 2.0, 2.5, 2.0])
-        with col_h1: st.markdown("출장비")
-        with col_h2: st.markdown("숙박비")
-        with col_h3: hotel_pay = st.selectbox("숙박비 지급처", ["여행사", "출장자"], index=1, key="hotel_pay_sel", label_visibility="collapsed")
-        with col_h4: hotel_krw = st.number_input("숙박비 금액", value=int(calc_h_init), step=None, format="%d", key="hotel_val", label_visibility="collapsed")
-        with col_h5: st.markdown("자동산정/수정가능")
-
-        col_d1, col_d2, col_d3, col_d4, col_d5 = st.columns([1.5, 2.0, 2.0, 2.5, 2.0])
-        with col_d1: st.markdown("")
-        with col_d2: st.markdown("일당")
-        with col_d3: daily_pay = st.selectbox("일당 지급처", ["여행사", "출장자"], index=1, key="daily_pay_sel", label_visibility="collapsed")
-        with col_d4: daily_krw = st.number_input("일당 금액", value=int(calc_d_init), step=None, format="%d", key="daily_val", label_visibility="collapsed")
-        with col_d5: st.markdown("자동산정/수정가능")
-
-        total_etc_krw = 0
-        etc_payments = []
-        for idx, item in enumerate(st.session_state.custom_etc_items):
-            gc1, gc2, gc3, gc4, gc5 = st.columns([1.5, 2.0, 2.0, 2.5, 2.0])
-            with gc1: 
-                if idx == 0: st.markdown("기타")
-                else: st.markdown("")
-            with gc2: st.markdown(item["name"])
-            with gc3: 
-                p_val = st.selectbox(f"지급처_{idx}", ["여행사", "출장자"], index=0 if item["pay"]=="여행사" else 1, key=f"etc_pay_{idx}", label_visibility="collapsed")
-                item["pay"] = p_val
-            with gc4: 
-                a_val = st.number_input(f"금액_{idx}", value=int(item["amount"]), step=None, format="%d", key=f"etc_val_{idx}", label_visibility="collapsed")
-                item["amount"] = a_val
-            with gc5:
-                if st.form_submit_button(f"삭제_{idx}", use_container_width=True):
-                    st.session_state.custom_etc_items.pop(idx)
-                    st.rerun()
-            
-            total_etc_krw += a_val
-            etc_payments.append((a_val, p_val))
-
-        total_sum_preview = air_krw + esta_krw + hotel_krw + daily_krw + total_etc_krw
-        
-        closing_table_html = f"""
-            <tr class="total-row">
-                <td colspan="3" style="text-align: right; padding-right: 20px;">입력 항목 총액 합계</td>
-                <td colspan="2" style="text-align: center;">₩ {int(total_sum_preview):,}</td>
+    table_html = """
+    <style>
+    .custom-expense-table {
+        width: 100%;
+        border-collapse: collapse;
+        margin-top: 10px;
+        margin-bottom: 10px;
+        font-size: 14px;
+        text-align: center;
+        font-family: inherit;
+    }
+    .custom-expense-table th, .custom-expense-table td {
+        border: 1px solid #cbd5e1;
+        padding: 8px;
+        text-align: center;
+        vertical-align: middle;
+    }
+    .custom-expense-table th {
+        background-color: #f1f5f9;
+        font-weight: bold;
+        color: #1e293b;
+    }
+    .custom-expense-table tr:nth-child(even) {
+        background-color: #f8fafc;
+    }
+    .custom-expense-table tr:nth-child(odd) {
+        background-color: #ffffff;
+    }
+    .total-row {
+        background-color: #fef08a !important;
+        font-weight: bold;
+    }
+    </style>
+    <table class="custom-expense-table">
+        <thead>
+            <tr>
+                <th style="width: 15%;">대분류</th>
+                <th style="width: 20%;">소분류</th>
+                <th style="width: 20%;">지급처</th>
+                <th style="width: 25%;">금액 (KRW)</th>
+                <th style="width: 20%;">비고</th>
             </tr>
-            </tbody>
-        </table>
-        """
-        st.markdown(closing_table_html, unsafe_allow_html=True)
+        </thead>
+        <tbody>
+    """
+    st.markdown(table_html, unsafe_allow_html=True)
 
-        submitted = st.form_submit_button("➕ 출장자 정보 등록 / 추가", use_container_width=True)
+    col_t1, col_t2, col_t3, col_t4, col_t5 = st.columns([1.5, 2.0, 2.0, 2.5, 2.0])
+    with col_t1: st.markdown("교통비")
+    with col_t2: st.markdown("항공권")
+    with col_t3: air_pay = st.selectbox("항공권 지급처", ["여행사", "출장자"], index=0, key="air_pay_sel", label_visibility="collapsed")
+    with col_t4: air_krw = st.number_input("항공권 금액", value=0, step=None, format="%d", key="air_val", label_visibility="collapsed")
+    with col_t5: st.markdown("-")
 
-        if submitted:
-            final_region = region if region else auto_reg
-            final_rank = rank if rank else auto_rank
-            if not name.strip():
-                st.error("성명을 입력해주세요.")
-            elif not final_region:
-                st.error("지역구분을 선택해주세요.")
-            elif not final_rank:
-                st.error("직급을 선택해주세요.")
+    col_e1, col_e2, col_e3, col_e4, col_e5 = st.columns([1.5, 2.0, 2.0, 2.5, 2.0])
+    with col_e1: st.markdown("")
+    with col_e2: st.markdown("ESTA")
+    with col_e3: esta_pay = st.selectbox("ESTA 지급처", ["여행사", "출장자"], index=0, key="esta_pay_sel", label_visibility="collapsed")
+    with col_e4: esta_krw = st.number_input("ESTA 금액", value=0, step=None, format="%d", key="esta_val", label_visibility="collapsed")
+    with col_e5: st.markdown("-")
+
+    col_h1, col_h2, col_h3, col_h4, col_h5 = st.columns([1.5, 2.0, 2.0, 2.5, 2.0])
+    with col_h1: st.markdown("출장비")
+    with col_h2: st.markdown("숙박비")
+    with col_h3: hotel_pay = st.selectbox("숙박비 지급처", ["여행사", "출장자"], index=1, key="hotel_pay_sel", label_visibility="collapsed")
+    with col_h4: hotel_krw = st.number_input("숙박비 금액", value=int(calc_h_init), step=None, format="%d", key="hotel_val", label_visibility="collapsed")
+    with col_h5: st.markdown("자동산정/수정가능")
+
+    col_d1, col_d2, col_d3, col_d4, col_d5 = st.columns([1.5, 2.0, 2.0, 2.5, 2.0])
+    with col_d1: st.markdown("")
+    with col_d2: st.markdown("일당")
+    with col_d3: daily_pay = st.selectbox("일당 지급처", ["여행사", "출장자"], index=1, key="daily_pay_sel", label_visibility="collapsed")
+    with col_d4: daily_krw = st.number_input("일당 금액", value=int(calc_d_init), step=None, format="%d", key="daily_val", label_visibility="collapsed")
+    with col_d5: st.markdown("자동산정/수정가능")
+
+    total_etc_krw = 0
+    etc_payments = []
+    for idx, item in enumerate(st.session_state.custom_etc_items):
+        gc1, gc2, gc3, gc4, gc5 = st.columns([1.5, 2.0, 2.0, 2.5, 2.0])
+        with gc1: 
+            if idx == 0: st.markdown("기타")
+            else: st.markdown("")
+        with gc2: st.markdown(item["name"])
+        with gc3: 
+            p_val = st.selectbox(f"지급처_{idx}", ["여행사", "출장자"], index=0 if item["pay"]=="여행사" else 1, key=f"etc_pay_{idx}", label_visibility="collapsed")
+            item["pay"] = p_val
+        with gc4: 
+            a_val = st.number_input(f"금액_{idx}", value=int(item["amount"]), step=None, format="%d", key=f"etc_val_{idx}", label_visibility="collapsed")
+            item["amount"] = a_val
+        with gc5:
+            if st.button(f"삭제_{idx}", key=f"del_etc_{idx}", use_container_width=True):
+                st.session_state.custom_etc_items.pop(idx)
+                st.rerun()
+        
+        total_etc_krw += a_val
+        etc_payments.append((a_val, p_val))
+
+    total_sum_preview = air_krw + esta_krw + hotel_krw + daily_krw + total_etc_krw
+    
+    closing_table_html = f"""
+        <tr class="total-row">
+            <td colspan="3" style="text-align: right; padding-right: 20px;">입력 항목 총액 합계</td>
+            <td colspan="2" style="text-align: center;">₩ {int(total_sum_preview):,}</td>
+        </tr>
+        </tbody>
+    </table>
+    """
+    st.markdown(closing_table_html, unsafe_allow_html=True)
+
+    if st.button("➕ 출장자 정보 등록 / 추가", type="primary", use_container_width=True):
+        final_region = region if region else auto_reg
+        final_rank = rank if rank else auto_rank
+        if not name.strip():
+            st.error("성명을 입력해주세요.")
+        elif not final_region:
+            st.error("지역구분을 선택해주세요.")
+        elif not final_rank:
+            st.error("직급을 선택해주세요.")
+        else:
+            days = (date_end - date_start).days + 1
+            nights = max(0, days - 1)
+            if flight_night:
+                nights = max(0, nights - 1)
+
+            if days <= 0:
+                st.error("도착일은 출발일 이후여야 합니다.")
             else:
-                days = (date_end - date_start).days + 1
-                nights = max(0, days - 1)
-                if flight_night:
-                    nights = max(0, nights - 1)
-
-                if days <= 0:
-                    st.error("도착일은 출발일 이후여야 합니다.")
-                else:
-                    new_data = {
-                        "부서": dep,
-                        "성명": name.strip(),
-                        "출장지": location.strip(),
-                        "지역구분": final_region,
-                        "직급": position,
-                        "직급구분": final_rank,
-                        "출발일": date_start.strftime("%Y-%m-%d"),
-                        "도착일": date_end.strftime("%Y-%m-%d"),
-                        "숙박일수": nights,
-                        "출장일수": days,
-                        "적용환율": main_rate,
-                        "일당_KRW": daily_krw,
-                        "일당_지급처": daily_pay,
-                        "숙박비_KRW": hotel_krw,
-                        "숙박비_지급처": hotel_pay,
-                        "교통비_KRW": air_krw + esta_krw,
-                        "교통비_지급처": air_pay,
-                        "기타경비_KRW": total_etc_krw,
-                        "기타_지급처": etc_payments[0][1] if etc_payments else "여행사"
-                    }
-                    
-                    new_df = pd.DataFrame([new_data])
-                    st.session_state.df_input = pd.concat([st.session_state.df_input, new_df], ignore_index=True)
-                    st.success(f"성공적으로 등록되었습니다: {name.strip()} ({location})")
+                new_data = {
+                    "부서": dep,
+                    "성명": name.strip(),
+                    "출장지": location.strip(),
+                    "지역구분": final_region,
+                    "직급": position,
+                    "직급구분": final_rank,
+                    "출발일": date_start.strftime("%Y-%m-%d"),
+                    "도착일": date_end.strftime("%Y-%m-%d"),
+                    "숙박일수": nights,
+                    "출장일수": days,
+                    "적용환율": main_rate,
+                    "일당_KRW": daily_krw,
+                    "일당_지급처": daily_pay,
+                    "숙박비_KRW": hotel_krw,
+                    "숙박비_지급처": hotel_pay,
+                    "교통비_KRW": air_krw + esta_krw,
+                    "교통비_지급처": air_pay,
+                    "기타경비_KRW": total_etc_krw,
+                    "기타_지급처": etc_payments[0][1] if etc_payments else "여행사"
+                }
+                
+                new_df = pd.DataFrame([new_data])
+                st.session_state.df_input = pd.concat([st.session_state.df_input, new_df], ignore_index=True)
+                st.success(f"성공적으로 등록되었습니다: {name.strip()} ({location})")
 
     st.markdown("---")
     st.subheader(f"📋 등록된 출장자 목록 (총 {len(st.session_state.df_input)}건)")
@@ -427,7 +426,7 @@ with tab1:
         display_df = calculate_expenses_df(st.session_state.df_input, main_rate)
         st.dataframe(display_df, use_container_width=True)
         
-        if st.button("🗑️ 전체 목록 초기화"):
+        if st.button("🗑️ 전체 목록 초기화", key="reset_all_btn"):
             st.session_state.df_input = pd.DataFrame(columns=st.session_state.df_input.columns)
             st.rerun()
     else:
@@ -443,7 +442,7 @@ with tab2:
     if st.session_state.df_input.empty:
         st.warning("먼저 '1. 출장자 정보 직접 입력' 탭에서 출장자 데이터를 입력해주세요.")
     else:
-        if st.button("🚀 자금팀 제출용 이미지 생성하기", type="primary"):
+        if st.button("🚀 자금팀 제출용 이미지 생성하기", type="primary", key="gen_img_btn"):
             try:
                 df_res = calculate_expenses_df(st.session_state.df_input, main_rate)
                 
@@ -521,7 +520,7 @@ with tab2:
                         start_str = d_start_dt.strftime("%m월 %d일")
                         end_str = datetime.strptime(str(r['도착일']), "%Y-%m-%d").strftime("%m월 %d일")
                         pay_req_dt = d_start_dt - timedelta(days=1)
-                        pay_req_str = f"{pay_req_dt.strftime('%m월 %d일')}({weekdays[pay_req_dt.weekday() ]})"
+                        pay_req_str = f"{pay_req_dt.strftime('%m월 %d일')}({weekdays[pay_req_dt.weekday()]})"
                     except:
                         start_str = str(r['출발일'])
                         end_str = str(r['도착일'])
@@ -584,7 +583,8 @@ with tab2:
                     label="💾 이미지 파일 다운로드 (.png)",
                     data=byte_im,
                     file_name=file_name,
-                    mime="image/png"
+                    mime="image/png",
+                    key="dl_img_btn"
                 )
 
             except Exception as e:
@@ -605,10 +605,11 @@ with tab3:
         selected_index = st.selectbox(
             "PDF를 생성할 출장자를 선택하세요:",
             options=df_res.index,
-            format_func=lambda i: f"[{df_res.loc[i, '부서']}] {df_res.loc[i, '성명']} (출장지: {df_res.loc[i, '출장지']})"
+            format_func=lambda i: f"[{df_res.loc[i, '부서']}] {df_res.loc[i, '성명']} (출장지: {df_res.loc[i, '출장지']})",
+            key="pdf_select_target"
         )
 
-        if st.button("📥 선택한 출장자 산정내역서 PDF 생성", type="primary"):
+        if st.button("📥 선택한 출장자 산정내역서 PDF 생성", type="primary", key="gen_pdf_btn"):
             r = df_res.loc[selected_index]
             
             try:
@@ -785,7 +786,8 @@ with tab3:
                     label=f"💾 {r['성명']}_산정내역서.pdf 다운로드",
                     data=pdf_data,
                     file_name=f"해외출장비_산정내역서_{r['성명']}_{datetime.now().strftime('%Y%m%d')}.pdf",
-                    mime="application/pdf"
+                    mime="application/pdf",
+                    key="dl_pdf_btn"
                 )
 
             except Exception as e:

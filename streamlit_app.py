@@ -164,9 +164,17 @@ with tab1:
     st.markdown(
         "출장자 정보와 출장지, 직급을 입력하면 규정에 따른 일당과 숙박비가 자동 산정됩니다."
     )
-    st.markdown(
-        "🔗 [서울외국환중개 환율 조회 사이트 바로가기](http://www.smbs.biz/ExRate/TodayExRate.jsp)"
-    )
+
+    # 환율 사이트 링크와 환율 입력 칸을 나란히 배치
+    col_rate_info, col_rate_input = st.columns([2, 1])
+    with col_rate_info:
+        st.markdown(
+            "🔗 [서울외국환중개 환율 조회 사이트 바로가기](http://www.smbs.biz/ExRate/TodayExRate.jsp)"
+        )
+    with col_rate_input:
+        exchange_rate = st.number_input(
+            "적용 환율 입력", min_value=0.0, value=1350.0, step=1.0
+        )
 
     with st.form("travel_input_form"):
         col_a, col_b = st.columns(2)
@@ -192,7 +200,7 @@ with tab1:
                     "2급기능장",
                 ],
             )
-            # 직급 구분 자동 표시 기능 (참고용)
+            # 1. 입력한 직급에 맞게 직급 구분이 자동으로 반영되도록 수정
             preview_pos_group = get_position_group(position)
             st.text_input(
                 "직급 구분",
@@ -203,14 +211,17 @@ with tab1:
 
         with col_b:
             st.subheader("🌍 출장지 및 일정")
-            country = st.text_input("출장지")
+            # 2. 출장 시작일, 종료일을 위로 올리고 출장지 및 지역 구분 배치
             start_date = st.date_input("출장 시작일")
             end_date = st.date_input("출장 종료일")
-            exchange_rate = st.number_input(
-                "적용 환율 (서울외국환중개 고시 환율)",
-                min_value=0.0,
-                value=1350.0,
-                step=1.0,
+            country = st.text_input("출장지 (예: 베트남, 일본 등)")
+
+            preview_region_group = get_region_group(country) if country else "-"
+            st.text_input(
+                "지역 구분",
+                value=preview_region_group,
+                disabled=True,
+                help="출장지에 따라 자동으로 판정됩니다 (갑/을/병/특).",
             )
 
         st.markdown("---")
@@ -445,4 +456,3 @@ with tab3:
         st.warning(
             "⚠️ 입력된 출장 정보가 없습니다. [1. 출장 정보 입력] 탭에서 데이터를 먼저 입력해 주세요."
         )
-

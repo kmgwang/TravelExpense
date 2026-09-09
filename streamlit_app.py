@@ -370,11 +370,11 @@ with tab1:
             "요청하신 표 형식의 입력 구조에 맞춰 아래 항목별 금액을 직접 입력해주세요."
         )
 
-        # 열 비율 정의 (5열 구조: 구분, 항목, 금액, 지급처, 공백)
-        col_ratios = [1.2, 1.5, 2, 1.5, 1.0]
+        # 열 비율 정의 (4열 구조: 구분, 항목, 금액, 지급처)
+        col_ratios = [1.2, 1.5, 2, 1.5]
 
         # 테이블 헤더 구성 (각 열 중앙 정렬)
-        th1, th2, th3, th4, th5 = st.columns(col_ratios)
+        th1, th2, th3, th4 = st.columns(col_ratios)
         with th1:
             st.markdown("<div style='text-align: center;'><b>구분</b></div>", unsafe_allow_html=True)
         with th2:
@@ -383,15 +383,13 @@ with tab1:
             st.markdown("<div style='text-align: center;'><b>금액</b></div>", unsafe_allow_html=True)
         with th4:
             st.markdown("<div style='text-align: center;'><b>지급처</b></div>", unsafe_allow_html=True)
-        with th5:
-            st.markdown("")
 
         st.markdown("---")
 
         payer_options = ["여행사", "출장자", "직접입력"]
 
         # --- 교통비 섹션 ---
-        r1_c1, r1_c2, r1_c3, r1_c4, r1_c5 = st.columns(col_ratios)
+        r1_c1, r1_c2, r1_c3, r1_c4 = st.columns(col_ratios)
         with r1_c1:
             st.markdown("<div style='display: flex; align-items: center; height: 45px; justify-content: center;'><b>교통비</b></div>", unsafe_allow_html=True)
         with r1_c2:
@@ -406,10 +404,8 @@ with tab1:
             flight_payer = st.selectbox(
                 "항공권 지급처", payer_options, index=0, key="flight_p", label_visibility="collapsed"
             )
-        with r1_c5:
-            st.markdown("")
 
-        r2_c1, r2_c2, r2_c3, r2_c4, r2_c5 = st.columns(col_ratios)
+        r2_c1, r2_c2, r2_c3, r2_c4 = st.columns(col_ratios)
         with r2_c1:
             st.markdown("")  
         with r2_c2:
@@ -424,13 +420,11 @@ with tab1:
             esta_payer = st.selectbox(
                 "ESTA 지급처", payer_options, index=0, key="esta_p", label_visibility="collapsed"
             )
-        with r2_c5:
-            st.markdown("")
 
         st.markdown("---")
 
         # --- 출장비 섹션 ---
-        r3_c1, r3_c2, r3_c3, r3_c4, r3_c5 = st.columns(col_ratios)
+        r3_c1, r3_c2, r3_c3, r3_c4 = st.columns(col_ratios)
         with r3_c1:
             st.markdown("<div style='display: flex; align-items: center; height: 45px; justify-content: center;'><b>출장비</b></div>", unsafe_allow_html=True)
         with r3_c2:
@@ -445,10 +439,8 @@ with tab1:
             hotel_payer = st.selectbox(
                 "숙박비 지급처", payer_options, index=1, key="hotel_p", label_visibility="collapsed"
             )
-        with r3_c5:
-            st.markdown("")
 
-        r4_c1, r4_c2, r4_c3, r4_c4, r4_c5 = st.columns(col_ratios)
+        r4_c1, r4_c2, r4_c3, r4_c4 = st.columns(col_ratios)
         with r4_c1:
             st.markdown("")  
         with r4_c2:
@@ -463,17 +455,15 @@ with tab1:
             daily_payer = st.selectbox(
                 "일당 지급처", payer_options, index=1, key="daily_p", label_visibility="collapsed"
             )
-        with r4_c5:
-            st.markdown("")
 
         st.markdown("---")
 
-        # --- 기타 섹션 ---
+        # --- 기타 섹션 (동적 행 관리) ---
         updated_other_rows = []
-        num_other_rows = len(st.session_state.other_rows)
+        num_rows = len(st.session_state.other_rows)
         
         for idx, row_data in enumerate(st.session_state.other_rows):
-            oc1, oc2, oc3, oc4, oc5 = st.columns(col_ratios)
+            oc1, oc2, oc3, oc4 = st.columns(col_ratios)
             with oc1:
                 if idx == 0:
                     st.markdown("<div style='display: flex; align-items: center; height: 45px; justify-content: center;'><b>기타</b></div>", unsafe_allow_html=True)
@@ -507,8 +497,6 @@ with tab1:
                     key=f"other_payer_{idx}",
                     label_visibility="collapsed",
                 )
-            with oc5:
-                st.markdown("")
 
             try:
                 parsed_amt = int(it_amt_str.replace(",", ""))
@@ -521,21 +509,27 @@ with tab1:
 
         st.session_state.other_rows = updated_other_rows
 
-        # --- 기타 섹션 바로 아래 전체 행 길이를 절반으로 나누어 "+"와 "-" 버튼 배치 ---
-        btn_c1, btn_c2 = st.columns(2)
-        with btn_c1:
+        # --- 기타 마지막 행 아래에 "+" 버튼과 "-" 버튼 배치 ---
+        # 위 행의 "항목", "금액", "지급처" 열 길이(1.5 + 2 + 1.5 = 5.0) 영역에 맞추기 위해
+        # 빈 공간(구분 열에 해당하는 1.2 너비)을 두고, 나머지 영역을 2분할하여 버튼 배치
+        b_c1, b_c2, b_c3 = st.columns([1.2, 2.5, 2.5])
+        with b_c1:
+            st.markdown("")
+        with b_c2:
             if st.form_submit_button("➕ 행 추가", use_container_width=True):
                 st.session_state.other_rows.append({"item": "", "amount": 0, "payer": "여행사"})
                 st.rerun()
-        with btn_c2:
-            if st.form_submit_button("➖ 행 삭제", use_container_width=True):
-                if len(st.session_state.other_rows) > 1:
+        with b_c3:
+            if len(st.session_state.other_rows) > 1:
+                if st.form_submit_button("➖ 마지막 행 삭제", use_container_width=True):
                     st.session_state.other_rows.pop()
                     st.rerun()
+            else:
+                st.markdown("")
 
         st.markdown("---")
         submitted = st.form_submit_button(
-            "➕ 입력한 출장 내역 규정 적용 및 추가"
+            "➕ 입력한 출장 내역 규정 적용 및 추가", use_container_width=True
         )
 
         if submitted:
@@ -758,7 +752,7 @@ with tab3:
         output_person.seek(0)
 
         st.download_button(
-            label=f"📥 [{selected_person}] 출장자용 산정 내역서 엑셀 다운로드",
+            label=f"📥 [{selected_person}] 출자자용 산정 내역서 엑셀 다운로드",
             data=output_person,
             file_name=f"화천기공_해외출장산정내역서_{selected_person}.xlsx",
             mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",

@@ -22,9 +22,23 @@ st.markdown("---")
 if "travel_list" not in st.session_state:
     st.session_state.travel_list = []
 
-# 기타 항목 동적 행 관리를 위한 세션 상태 초기화
+# 경비 입력 폼의 동적 행 관리를 위한 세션 상태 초기화 (교통비, 출장비, 기타별 분리)
+if "transport_rows" not in st.session_state:
+    st.session_state.transport_rows = [
+        {"item": "항공권", "amount": 0, "payer": "여행사"},
+        {"item": "ESTA", "amount": 0, "payer": "여행사"}
+    ]
+
+if "travel_exp_rows" not in st.session_state:
+    st.session_state.travel_exp_rows = [
+        {"item": "숙박비", "amount": 0, "payer": "출장자"},
+        {"item": "일당", "amount": 0, "payer": "출장자"}
+    ]
+
 if "other_rows" not in st.session_state:
-    st.session_state.other_rows = [{"item": "", "amount": 0, "payer": "여행사"}]
+    st.session_state.other_rows = [
+        {"item": "", "amount": 0, "payer": "여행사"}
+    ]
 
 
 # 1. 직급에 따른 직급 구분 함수
@@ -149,31 +163,21 @@ def process_travel_data(data_list):
         agency_total = 0
         employee_total = 0
 
-        f_amt = d.get("항공료", 0)
-        f_payer = d.get("항공료_지급처", "여행사")
-        if f_payer == "여행사":
-            agency_total += f_amt
-        else:
-            employee_total += f_amt
+        for t in d.get("교통비항목리스트", []):
+            amt = t.get("amount", 0)
+            payer = t.get("payer", "여행사")
+            if payer == "여행사":
+                agency_total += amt
+            else:
+                employee_total += amt
 
-        e_amt = d.get("ESTA기타", 0)
-        e_payer = d.get("ESTA_지급처", "여행사")
-        if e_payer == "여행사":
-            agency_total += e_amt
-        else:
-            employee_total += e_amt
-
-        h_payer = d.get("숙박비_지급처", "출장자")
-        if h_payer == "여행사":
-            agency_total += calc_hotel
-        else:
-            employee_total += calc_hotel
-
-        d_payer = d.get("일당_지급처", "출장자")
-        if d_payer == "여행사":
-            agency_total += calc_daily
-        else:
-            employee_total += calc_daily
+        for te in d.get("출장비항목리스트", []):
+            amt = te.get("amount", 0)
+            payer = te.get("payer", "출장자")
+            if payer == "여행사":
+                agency_total += amt
+            else:
+                employee_total += amt
 
         for other in d.get("기타항목리스트", []):
             o_amt = other.get("amount", 0)
@@ -370,10 +374,9 @@ with tab1:
             "요청하신 표 형식의 입력 구조에 맞춰 아래 항목별 금액을 직접 입력해주세요."
         )
 
-        # 열 비율 정의 (4열 구조: 구분, 항목, 금액, 지급처)
         col_ratios = [1.2, 1.5, 2, 1.5]
 
-        # 테이블 헤더 구성 (각 열 중앙 정렬)
+        # 헤더
         th1, th2, th3, th4 = st.columns(col_ratios)
         with th1:
             st.markdown("<div style='text-align: center;'><b>구분</b></div>", unsafe_allow_html=True)
@@ -385,83 +388,107 @@ with tab1:
             st.markdown("<div style='text-align: center;'><b>지급처</b></div>", unsafe_allow_html=True)
 
         st.markdown("---")
-
         payer_options = ["여행사", "출장자", "직접입력"]
 
-        # --- 교통비 섹션 ---
-        r1_c1, r1_c2, r1_c3, r1_c4 = st.columns(col_ratios)
-        with r1_c1:
-            st.markdown("<div style='display: flex; align-items: center; height: 45px; justify-content: center;'><b>교통비</b></div>", unsafe_allow_html=True)
-        with r1_c2:
-            flight_item_name = st.text_input(
-                "교통비 항목 1", value="항공권", key="f_item", label_visibility="collapsed"
-            )
-        with r1_c3:
-            flight_str = st.text_input(
-                "항공권 금액", value="0", key="f_amt", label_visibility="collapsed"
-            )
-        with r1_c4:
-            flight_payer = st.selectbox(
-                "항공권 지급처", payer_options, index=0, key="flight_p", label_visibility="collapsed"
-            )
+        # --- 1. 교통비 섹션 ---
+        updated_transport_rows = []
+        transport_sum = 0
+        t_len = len(st.session_state.transport_rows)
+        for idx, row_data in enumerate(st.session_state.transport_rows):
+            tc1, tc2, tc3, tc4 = st.columns(col_ratios)
+            with tc1:
+                if idx == 0:
+                    st.markdown("<div style='display: flex; align-items: center; height: 45px; justify-content: center;'><b>교통비</b></div>", unsafe_allow_html=True)
+                else:
+                    st.markdown("")
+            with tc2:
+                t_name = st.text_input(
+                    f"교통비 항목 {idx}", value=row_data["item"], key=f"t_item_{idx}", label_visibility="collapsed"
+                )
+            with tc3:
+                t_amt_str = st.text_input(
+                    f"교통비 금액 {idx}", value=str(row_data["amount"]), key=f"t_amt_{idx}", label_visibility="collapsed"
+                )
+            with tc4:
+                p_idx = payer_options.index(row_data["payer"]) if row_data["payer"] in payer_options else 0
+                t_payer = st.selectbox(
+                    f"교통비 지급처 {idx}", payer_options, index=p_idx, key=f"t_payer_{idx}", label_visibility="collapsed"
+                )
 
-        r2_c1, r2_c2, r2_c3, r2_c4 = st.columns(col_ratios)
-        with r2_c1:
-            st.markdown("")  
-        with r2_c2:
-            esta_item_name = st.text_input(
-                "교통비 항목 2", value="ESTA", key="e_item", label_visibility="collapsed"
-            )
-        with r2_c3:
-            esta_str = st.text_input(
-                "ESTA 금액", value="0", key="e_amt", label_visibility="collapsed"
-            )
-        with r2_c4:
-            esta_payer = st.selectbox(
-                "ESTA 지급처", payer_options, index=0, key="esta_p", label_visibility="collapsed"
-            )
+            try:
+                parsed_amt = int(t_amt_str.replace(",", ""))
+            except ValueError:
+                parsed_amt = 0
 
-        st.markdown("---")
+            transport_sum += parsed_amt
+            updated_transport_rows.append({"item": t_name, "amount": parsed_amt, "payer": t_payer})
 
-        # --- 출장비 섹션 ---
-        r3_c1, r3_c2, r3_c3, r3_c4 = st.columns(col_ratios)
-        with r3_c1:
-            st.markdown("<div style='display: flex; align-items: center; height: 45px; justify-content: center;'><b>출장비</b></div>", unsafe_allow_html=True)
-        with r3_c2:
-            hotel_item_name = st.text_input(
-                "출장비 항목 1", value="숙박비", key="h_item", label_visibility="collapsed"
-            )
-        with r3_c3:
-            hotel_str = st.text_input(
-                "숙박비 금액", value="0", key="h_amt", label_visibility="collapsed"
-            )
-        with r3_c4:
-            hotel_payer = st.selectbox(
-                "숙박비 지급처", payer_options, index=1, key="hotel_p", label_visibility="collapsed"
-            )
+        st.session_state.transport_rows = updated_transport_rows
 
-        r4_c1, r4_c2, r4_c3, r4_c4 = st.columns(col_ratios)
-        with r4_c1:
-            st.markdown("")  
-        with r4_c2:
-            daily_item_name = st.text_input(
-                "출장비 항목 2", value="일당", key="d_item", label_visibility="collapsed"
-            )
-        with r4_c3:
-            daily_str = st.text_input(
-                "일당 금액", value="0", key="d_amt", label_visibility="collapsed"
-            )
-        with r4_c4:
-            daily_payer = st.selectbox(
-                "일당 지급처", payer_options, index=1, key="daily_p", label_visibility="collapsed"
-            )
+        # 교통비 총계 행
+        sc1, sc2, sc3, sc4 = st.columns(col_ratios)
+        with sc1:
+            st.markdown("")
+        with sc2:
+            st.markdown("<div style='text-align: right;'><b>교통비 총계</b></div>", unsafe_allow_html=True)
+        with sc3:
+            st.markdown(f"<div style='text-align: right;'><b>{transport_sum:,.0f} 원</b></div>", unsafe_allow_html=True)
+        with sc4:
+            st.markdown("")
 
         st.markdown("---")
 
-        # --- 기타 섹션 (동적 행 관리) ---
+        # --- 2. 출장비 섹션 ---
+        updated_travel_exp_rows = []
+        travel_exp_sum = 0
+        te_len = len(st.session_state.travel_exp_rows)
+        for idx, row_data in enumerate(st.session_state.travel_exp_rows):
+            tec1, tec2, tec3, tec4 = st.columns(col_ratios)
+            with tec1:
+                if idx == 0:
+                    st.markdown("<div style='display: flex; align-items: center; height: 45px; justify-content: center;'><b>출장비</b></div>", unsafe_allow_html=True)
+                else:
+                    st.markdown("")
+            with tec2:
+                te_name = st.text_input(
+                    f"출장비 항목 {idx}", value=row_data["item"], key=f"te_item_{idx}", label_visibility="collapsed"
+                )
+            with tec3:
+                te_amt_str = st.text_input(
+                    f"출장비 금액 {idx}", value=str(row_data["amount"]), key=f"te_amt_{idx}", label_visibility="collapsed"
+                )
+            with tec4:
+                p_idx = payer_options.index(row_data["payer"]) if row_data["payer"] in payer_options else 1
+                te_payer = st.selectbox(
+                    f"출장비 지급처 {idx}", payer_options, index=p_idx, key=f"te_payer_{idx}", label_visibility="collapsed"
+                )
+
+            try:
+                parsed_amt = int(te_amt_str.replace(",", ""))
+            except ValueError:
+                parsed_amt = 0
+
+            travel_exp_sum += parsed_amt
+            updated_travel_exp_rows.append({"item": te_name, "amount": parsed_amt, "payer": te_payer})
+
+        st.session_state.travel_exp_rows = updated_travel_exp_rows
+
+        # 출장비 총계 행
+        tc1, tc2, tc3, tc4 = st.columns(col_ratios)
+        with tc1:
+            st.markdown("")
+        with tc2:
+            st.markdown("<div style='text-align: right;'><b>출장비 총계</b></div>", unsafe_allow_html=True)
+        with tc3:
+            st.markdown(f"<div style='text-align: right;'><b>{travel_exp_sum:,.0f} 원</b></div>", unsafe_allow_html=True)
+        with tc4:
+            st.markdown("")
+
+        st.markdown("---")
+
+        # --- 3. 기타 섹션 (동적 행 관리) ---
         updated_other_rows = []
-        num_rows = len(st.session_state.other_rows)
-        
+        other_sum = 0
         for idx, row_data in enumerate(st.session_state.other_rows):
             oc1, oc2, oc3, oc4 = st.columns(col_ratios)
             with oc1:
@@ -503,29 +530,53 @@ with tab1:
             except ValueError:
                 parsed_amt = 0
 
+            other_sum += parsed_amt
             updated_other_rows.append(
                 {"item": it_name, "amount": parsed_amt, "payer": it_payer}
             )
 
         st.session_state.other_rows = updated_other_rows
 
-        # --- 기타 마지막 행 아래에 "+" 버튼과 "-" 버튼 배치 ---
-        # 위 행의 "항목", "금액", "지급처" 열 길이(1.5 + 2 + 1.5 = 5.0) 영역에 맞추기 위해
-        # 빈 공간(구분 열에 해당하는 1.2 너비)을 두고, 나머지 영역을 2분할하여 버튼 배치
+        # 기타 마지막 행 아래에 행 추가/삭제 버튼 배치
         b_c1, b_c2, b_c3 = st.columns([1.2, 2.5, 2.5])
         with b_c1:
             st.markdown("")
         with b_c2:
-            if st.form_submit_button("➕ 행 추가", use_container_width=True):
+            if st.form_submit_button("➕ 기타 행 추가", use_container_width=True):
                 st.session_state.other_rows.append({"item": "", "amount": 0, "payer": "여행사"})
                 st.rerun()
         with b_c3:
             if len(st.session_state.other_rows) > 1:
-                if st.form_submit_button("➖ 마지막 행 삭제", use_container_width=True):
+                if st.form_submit_button("➖ 기타 마지막 행 삭제", use_container_width=True):
                     st.session_state.other_rows.pop()
                     st.rerun()
             else:
                 st.markdown("")
+
+        # 기타 총계 행
+        oc1, oc2, oc3, oc4 = st.columns(col_ratios)
+        with oc1:
+            st.markdown("")
+        with oc2:
+            st.markdown("<div style='text-align: right;'><b>기타 총계</b></div>", unsafe_allow_html=True)
+        with oc3:
+            st.markdown(f"<div style='text-align: right;'><b>{other_sum:,.0f} 원</b></div>", unsafe_allow_html=True)
+        with oc4:
+            st.markdown("")
+
+        st.markdown("---")
+
+        # --- 4. 총액 행 (전체 금액 합계) ---
+        grand_total = transport_sum + travel_exp_sum + other_sum
+        tot_c1, tot_c2, tot_c3, tot_c4 = st.columns(col_ratios)
+        with tot_c1:
+            st.markdown("")
+        with tot_c2:
+            st.markdown("<div style='text-align: right;'><span style='font-size: 1.1em;'><b>총액</b></span></div>", unsafe_allow_html=True)
+        with tot_c3:
+            st.markdown(f"<div style='text-align: right;'><span style='font-size: 1.1em; color: #ff4b4b;'><b>{grand_total:,.0f} 원</b></span></div>", unsafe_allow_html=True)
+        with tot_c4:
+            st.markdown("")
 
         st.markdown("---")
         submitted = st.form_submit_button(
@@ -536,26 +587,6 @@ with tab1:
             if not name or not country:
                 st.error("⚠️ 출장자 성명과 출장지는 필수 입력 항목입니다.")
             else:
-                try:
-                    flight_val = int(flight_str.replace(",", ""))
-                except ValueError:
-                    flight_val = 0
-
-                try:
-                    esta_val = int(esta_str.replace(",", ""))
-                except ValueError:
-                    esta_val = 0
-
-                try:
-                    hotel_val = int(hotel_str.replace(",", ""))
-                except ValueError:
-                    hotel_val = 0
-
-                try:
-                    daily_val = int(daily_str.replace(",", ""))
-                except ValueError:
-                    daily_val = 0
-
                 new_data = {
                     "출장자성명": name,
                     "부서": department,
@@ -568,14 +599,8 @@ with tab1:
                     "출장일수": calculated_days,
                     "출장박수": calculated_nights,
                     "환율": exchange_rate,
-                    "항공료": flight_val,
-                    "항공료_지급처": flight_payer,
-                    "ESTA기타": esta_val,
-                    "ESTA_지급처": esta_payer,
-                    "실비숙박_입력": hotel_val,
-                    "숙박비_지급처": hotel_payer,
-                    "일당_입력값": daily_val,
-                    "일당_지급처": daily_payer,
+                    "교통비항목리스트": st.session_state.transport_rows.copy(),
+                    "출장비항목리스트": st.session_state.travel_exp_rows.copy(),
                     "기타항목리스트": st.session_state.other_rows.copy(),
                 }
                 st.session_state.travel_list.append(new_data)
@@ -752,7 +777,7 @@ with tab3:
         output_person.seek(0)
 
         st.download_button(
-            label=f"📥 [{selected_person}] 출자자용 산정 내역서 엑셀 다운로드",
+            label=f"📥 [{selected_person}] 출장자용 산정 내역서 엑셀 다운로드",
             data=output_person,
             file_name=f"화천기공_해외출장산정내역서_{selected_person}.xlsx",
             mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",

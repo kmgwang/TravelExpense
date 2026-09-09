@@ -110,8 +110,8 @@ def process_travel_data(data_list):
     processed = []
     for item in data_list:
         d = item.copy()
-        pos_group = d["직급구분"]  # 사용자가 지정/수정한 직급구분 반영
-        region = d["지역구분"]  # 사용자가 지정/수정한 지역구분 반영
+        pos_group = d["직급구분"]
+        region = d["지역구분"]
         std_daily, std_hotel = get_standard_rates(region, pos_group)
 
         d["기준일당_외화"] = std_daily
@@ -123,13 +123,15 @@ def process_travel_data(data_list):
         else:
             applied_rate = raw_rate
 
-        calc_daily = std_daily * applied_rate
+        # 일수(체류 기간)를 반영하여 일당 계산
+        calc_daily = std_daily * applied_rate * d.get("출장일수", 1)
         d["산정일당_원화"] = int(calc_daily // 100 * 100)
 
         if std_hotel == "실비":
             calc_hotel = d.get("실비숙박_입력", 0)
         else:
-            calc_hotel = std_hotel * applied_rate
+            # 숙박비는 일반적으로 (박수) 기준으로 산정
+            calc_hotel = std_hotel * applied_rate * d.get("출장박수", 0)
         d["산정숙박_원화"] = int(calc_hotel // 100 * 100)
 
         d["직원_계좌입금액"] = d["산정일당_원화"] + d["산정숙박_원화"]
@@ -174,12 +176,76 @@ with tab1:
             "적용 환율 입력", min_value=0.0, value=1350.0, step=1.0
         )
 
-    # 폼 외부에서 입력을 받아 실시간 자동 매핑 결과를 selectbox에 반영
+    # 부서 목록 정의
+    department_list = [
+        "임원",
+        "경영지원본부",
+        "경영지원실",
+        "인사지원팀",
+        "관리팀",
+        "재무전략실",
+        "노동조합",
+        "재무팀",
+        "자금팀",
+        "정보실",
+        "정보팀",
+        "IBU",
+        "성장전략실",
+        "프로젝트팀",
+        "구매전략본부",
+        "HTB 대만지사",
+        "구매팀",
+        "VI팀",
+        "품질혁신본부",
+        "QM팀",
+        "보전팀",
+        "생산본부",
+        "생산관리팀",
+        "생산기술팀",
+        "가공팀",
+        "F/S가공",
+        "정밀가공",
+        "가공지원",
+        "UNIT팀",
+        "UNIT준비",
+        "UNIT조립",
+        "UNIT서비스",
+        "생산1팀",
+        "생산2팀",
+        "서비스센터",
+        "서비스1팀",
+        "서비스2팀",
+        "서비스3팀",
+        "서비스4팀",
+        "기술개발연구소",
+        "MC개발팀",
+        "TC개발팀",
+        "5축개발팀",
+        "UNIT개발팀",
+        "제어개발팀",
+        "제어SW개발팀",
+        "가공기술1팀",
+        "가공기술2팀",
+        "소재사업부문",
+        "기타",
+    ]
+
     col_a, col_b = st.columns(2)
     with col_a:
         st.subheader("👤 출장자 정보")
         name = st.text_input("출장자 성명")
-        department = st.text_input("부서", value="인사지원팀")
+
+        # 부서 드롭다운 선택
+        department = st.selectbox(
+            "부서",
+            department_list,
+            index=(
+                department_list.index("인사지원팀")
+                if "인사지원팀" in department_list
+                else 0
+            ),
+        )
+
         position = st.selectbox(
             "직급",
             [
@@ -199,7 +265,6 @@ with tab1:
             ],
         )
 
-        # 직급에 따른 자동 추천 값 계산 후 수동 선택 가능하도록 selectbox 배치
         auto_pos_group = get_position_group(position)
         pos_group_options = [
             "임원(부사장이상)",
@@ -214,18 +279,36 @@ with tab1:
             else 4
         )
         position_group = st.selectbox(
-            "직급 구분 (자동 판정 및 수정 가능)",
-            pos_group_options,
-            index=default_pos_idx,
+            "직급 구분", pos_group_options, index=default_pos_idx
         )
 
     with col_b:
         st.subheader("🌍 출장지 및 일정")
         start_date = st.date_input("출장 시작일")
         end_date = st.date_input("출장 종료일")
+
+        # 출장기간(몇박 며칠) 자동 계산 로직
+        raw_days = (end_date - start_date).days + 1
+        if raw_days < 1:
+            raw_days = 1
+
+        col_d1, col_d2 = st.columns([2, 1])
+        with col_d1:
+            is_flight_plus = st.checkbox(
+                "비행기 이동 등으로 1일 추가", value=False
+            )
+
+        calculated_days = raw_days + (1 if is_flight_plus else 0)
+        calculated_nights = (
+            calculated_days - 1 if calculated_days > 1 else 0
+        )
+
+        st.info(
+            f"📅 산정된 출장 기간: **{calculated_nights}박 {calculated_days}일**"
+        )
+
         country = st.text_input("출장지 (예: 베트남, 일본 등)")
 
-        # 출장지에 따른 자동 추천 값 계산 후 수동 선택 가능하도록 selectbox 배치
         auto_region = get_region_group(country) if country else "갑"
         region_options = ["갑", "을", "병", "특"]
         default_reg_idx = (
@@ -234,9 +317,7 @@ with tab1:
             else 0
         )
         region_group = st.selectbox(
-            "지역 구분 (자동 판정 및 수정 가능)",
-            region_options,
-            index=default_reg_idx,
+            "지역 구분", region_options, index=default_reg_idx
         )
 
     st.markdown("---")
@@ -286,6 +367,8 @@ with tab1:
                     "지역구분": region_group,
                     "출장시작일": str(start_date),
                     "출장종료일": str(end_date),
+                    "출장일수": calculated_days,
+                    "출장박수": calculated_nights,
                     "환율": exchange_rate,
                     "항공료": flight,
                     "ESTA기타": esta,
@@ -348,6 +431,7 @@ with tab2:
                 "직급구분",
                 "출장지",
                 "지역구분",
+                "출장일수",
                 "직원_계좌입금액",
                 "여행사_지급액",
                 "총출장비",
@@ -360,6 +444,7 @@ with tab2:
             "직급구분",
             "출장지",
             "지역구분",
+            "출장일수",
             "직원지급액(일비/숙박)",
             "여행사지급액(항공/보험등)",
             "총합계",
@@ -420,7 +505,7 @@ with tab3:
         with det_c2:
             st.success(
                 f"""
-            - **출장 기간**: {person_data.get('출장시작일', '')} ~ {person_data.get('출장종료일', '')}
+            - **출장 기간**: {person_data.get('출장시작일', '')} ~ {person_data.get('출장종료일', '')} ({person_data.get('출장박수', 0)}박 {person_data.get('출장일수', 0)}일)
             - **적용 환율**: {person_data.get('환율', 0):,.2f} 원 {'(엔화 100 환산 적용)' if person_data.get('지역구분')=='특' else ''}
             - **직원 계좌 입금 총액**: {person_data.get('직원_계좌입금액', 0):,.0f} 원
             """
@@ -435,11 +520,15 @@ with tab3:
 
         detail_table = pd.DataFrame(
             {
-                "경비 항목": ["일비", "숙박비", "항공료 및 대행비"],
+                "경비 항목": [
+                    f"일비 ({person_data.get('출장일수', 0)}일)",
+                    f"숙박비 ({person_data.get('출장박수', 0)}박)",
+                    "항공료 및 대행비",
+                ],
                 "규정 기준단가": [
-                    f"{person_data.get('기준일당_외화', 0):,d} {currency_unit}",
+                    f"{person_data.get('기준일당_외화', 0):,d} {currency_unit}/일",
                     (
-                        f"{person_data.get('기준숙박_외화', 0):,d} {currency_unit}"
+                        f"{person_data.get('기준숙박_외화', 0):,d} {currency_unit}/박"
                         if person_data.get("기준숙박_외화") != "실비"
                         else "실비"
                     ),

@@ -128,7 +128,6 @@ def process_travel_data(data_list):
         else:
             applied_rate = raw_rate
 
-        # 일당 산정 (수정 입력값 우선 반영, 없으면 규정 산정)
         user_daily = d.get("일당_입력값", 0)
         if user_daily > 0:
             calc_daily = user_daily
@@ -137,7 +136,6 @@ def process_travel_data(data_list):
             calc_daily = int(calc_daily // 100 * 100)
         d["산정일당_원화"] = calc_daily
 
-        # 숙박비 산정 (사용자 입력값 우선 반영, 없으면 규정 산정)
         user_hotel = d.get("실비숙박_입력", 0)
         if user_hotel > 0:
             calc_hotel = user_hotel
@@ -148,11 +146,9 @@ def process_travel_data(data_list):
             calc_hotel = int(calc_hotel // 100 * 100)
         d["산정숙박_원화"] = calc_hotel
 
-        # 지급처별 금액 분리 집계
         agency_total = 0
         employee_total = 0
 
-        # 항공권
         f_amt = d.get("항공료", 0)
         f_payer = d.get("항공료_지급처", "여행사")
         if f_payer == "여행사":
@@ -160,7 +156,6 @@ def process_travel_data(data_list):
         else:
             employee_total += f_amt
 
-        # ESTA
         e_amt = d.get("ESTA기타", 0)
         e_payer = d.get("ESTA_지급처", "여행사")
         if e_payer == "여행사":
@@ -168,21 +163,18 @@ def process_travel_data(data_list):
         else:
             employee_total += e_amt
 
-        # 숙박비
         h_payer = d.get("숙박비_지급처", "출장자")
         if h_payer == "여행사":
             agency_total += calc_hotel
         else:
             employee_total += calc_hotel
 
-        # 일당
         d_payer = d.get("일당_지급처", "출장자")
         if d_payer == "여행사":
             agency_total += calc_daily
         else:
             employee_total += calc_daily
 
-        # 기타 항목들
         for other in d.get("기타항목리스트", []):
             o_amt = other.get("amount", 0)
             o_payer = other.get("payer", "여행사")
@@ -198,6 +190,22 @@ def process_travel_data(data_list):
 
     return pd.DataFrame(processed)
 
+
+# 행 호버 시 버튼 표시를 위한 CSS 스타일 적용
+st.markdown(
+    """
+    <style>
+    .hover-action-container {
+        opacity: 0;
+        transition: opacity 0.2s ease-in-out;
+    }
+    div[data-testid="column"]:hover .hover-action-container {
+        opacity: 1;
+    }
+    </style>
+    """,
+    unsafe_allow_html=True,
+)
 
 # 3가지 탭 구성
 tab1, tab2, tab3 = st.tabs(
@@ -217,7 +225,6 @@ with tab1:
         "출장자 정보와 출장지, 직급을 입력하면 규정에 따른 일당과 숙박비가 자동 산정됩니다."
     )
 
-    # 환율 사이트 링크와 환율 입력 칸을 나란히 배치
     col_rate_info, col_rate_input = st.columns([2, 1])
     with col_rate_info:
         st.markdown(
@@ -228,7 +235,6 @@ with tab1:
             "적용 환율 입력", min_value=0.0, value=1350.0, step=1.0, format="%.2f"
         )
 
-    # 부서 목록 정의
     department_list = [
         "임원",
         "경영지원본부",
@@ -351,7 +357,6 @@ with tab1:
             "지역 구분", region_options, index=default_reg_idx
         )
 
-    # 기내 박 적용 옵션 및 출장 기간 계산 표시
     raw_days = (end_date - start_date).days + 1
     if raw_days < 1:
         raw_days = 1
@@ -381,8 +386,11 @@ with tab1:
             "요청하신 표 형식의 입력 구조에 맞춰 아래 항목별 금액을 직접 입력해주세요."
         )
 
-        # 테이블 헤더 구성 (각 열의 중앙 정렬을 위한 마크다운 또는 컬럼 배치)
-        th1, th2, th3, th4 = st.columns([1.2, 1.5, 2, 1.5])
+        # 열 비율 정의 (5열 구조: 구분, 항목, 금액, 지급처, 버튼공간)
+        col_ratios = [1.2, 1.5, 2, 1.5, 1.0]
+
+        # 테이블 헤더 구성 (각 열 중앙 정렬)
+        th1, th2, th3, th4, th5 = st.columns(col_ratios)
         with th1:
             st.markdown("<div style='text-align: center;'><b>구분</b></div>", unsafe_allow_html=True)
         with th2:
@@ -391,13 +399,15 @@ with tab1:
             st.markdown("<div style='text-align: center;'><b>금액</b></div>", unsafe_allow_html=True)
         with th4:
             st.markdown("<div style='text-align: center;'><b>지급처</b></div>", unsafe_allow_html=True)
+        with th5:
+            st.markdown("")
 
         st.markdown("---")
 
         payer_options = ["여행사", "출장자", "직접입력"]
 
-        # --- 교통비 섹션 (구분 셀 수직 중앙 정렬 배치) ---
-        r1_c1, r1_c2, r1_c3, r1_c4 = st.columns([1.2, 1.5, 2, 1.5])
+        # --- 교통비 섹션 ---
+        r1_c1, r1_c2, r1_c3, r1_c4, r1_c5 = st.columns(col_ratios)
         with r1_c1:
             st.markdown("<div style='display: flex; align-items: center; height: 45px; justify-content: center;'><b>교통비</b></div>", unsafe_allow_html=True)
         with r1_c2:
@@ -412,8 +422,10 @@ with tab1:
             flight_payer = st.selectbox(
                 "항공권 지급처", payer_options, index=0, key="flight_p", label_visibility="collapsed"
             )
+        with r1_c5:
+            st.markdown("")
 
-        r2_c1, r2_c2, r2_c3, r2_c4 = st.columns([1.2, 1.5, 2, 1.5])
+        r2_c1, r2_c2, r2_c3, r2_c4, r2_c5 = st.columns(col_ratios)
         with r2_c1:
             st.markdown("")  
         with r2_c2:
@@ -428,11 +440,13 @@ with tab1:
             esta_payer = st.selectbox(
                 "ESTA 지급처", payer_options, index=0, key="esta_p", label_visibility="collapsed"
             )
+        with r2_c5:
+            st.markdown("")
 
         st.markdown("---")
 
         # --- 출장비 섹션 ---
-        r3_c1, r3_c2, r3_c3, r3_c4 = st.columns([1.2, 1.5, 2, 1.5])
+        r3_c1, r3_c2, r3_c3, r3_c4, r3_c5 = st.columns(col_ratios)
         with r3_c1:
             st.markdown("<div style='display: flex; align-items: center; height: 45px; justify-content: center;'><b>출장비</b></div>", unsafe_allow_html=True)
         with r3_c2:
@@ -447,8 +461,10 @@ with tab1:
             hotel_payer = st.selectbox(
                 "숙박비 지급처", payer_options, index=1, key="hotel_p", label_visibility="collapsed"
             )
+        with r3_c5:
+            st.markdown("")
 
-        r4_c1, r4_c2, r4_c3, r4_c4 = st.columns([1.2, 1.5, 2, 1.5])
+        r4_c1, r4_c2, r4_c3, r4_c4, r4_c5 = st.columns(col_ratios)
         with r4_c1:
             st.markdown("")  
         with r4_c2:
@@ -456,24 +472,24 @@ with tab1:
                 "출장비 항목 2", value="일당", key="d_item", label_visibility="collapsed"
             )
         with r4_c3:
-            # 일당 수정 가능하도록 text_input으로 변경 및 숫자 입력 유도
             daily_str = st.text_input(
                 "일당 금액", value="0", key="d_amt", label_visibility="collapsed"
             )
         with r4_c4:
-            # 일당 지급처도 수정 가능하도록 selectbox 유지
             daily_payer = st.selectbox(
                 "일당 지급처", payer_options, index=1, key="daily_p", label_visibility="collapsed"
             )
+        with r4_c5:
+            st.markdown("")
 
         st.markdown("---")
 
-        # --- 기타 섹션 (각 행마다 추가/제거 버튼 배치) ---
+        # --- 기타 섹션 (커서 호버 시 버튼 표시 및 행별 추가/제거) ---
         updated_other_rows = []
         num_rows = len(st.session_state.other_rows)
         
         for idx, row_data in enumerate(st.session_state.other_rows):
-            oc1, oc2, oc3, oc4, oc5 = st.columns([1.2, 1.5, 2, 1.5, 1.2])
+            oc1, oc2, oc3, oc4, oc5 = st.columns(col_ratios)
             with oc1:
                 if idx == 0:
                     st.markdown("<div style='display: flex; align-items: center; height: 45px; justify-content: center;'><b>기타</b></div>", unsafe_allow_html=True)
@@ -508,7 +524,8 @@ with tab1:
                     label_visibility="collapsed",
                 )
             with oc5:
-                # 행별 추가/제거 버튼 구성
+                # 호버 시 나타나는 버튼 영역 컨테이너 적용
+                st.markdown('<div class="hover-action-container">', unsafe_allow_html=True)
                 btn_c1, btn_c2 = st.columns(2)
                 with btn_c1:
                     if st.form_submit_button("➕", key=f"add_row_{idx}"):
@@ -519,6 +536,7 @@ with tab1:
                         if st.form_submit_button("➖", key=f"del_row_{idx}"):
                             st.session_state.other_rows.pop(idx)
                             st.rerun()
+                st.markdown('</div>', unsafe_allow_html=True)
 
             try:
                 parsed_amt = int(it_amt_str.replace(",", ""))
@@ -742,7 +760,7 @@ with tab3:
                 "지급처 및 비고": [
                     "지급처 설정 반영",
                     "지급처 설정 반영",
-                    "지급처 설정 반영",
+                    "지급처 설정 REF",
                 ],
             }
         )

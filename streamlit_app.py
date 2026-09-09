@@ -40,7 +40,7 @@ st.markdown(
     unsafe_allow_html=True,
 )
 
-st.title("✈️ 해외출장비 정산 및 자료 생성 시스템")
+st.title("✈️ 해외출장비 계산 프로그램")
 
 st.markdown("---")
 

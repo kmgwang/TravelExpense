@@ -381,25 +381,25 @@ with tab1:
             "요청하신 표 형식의 입력 구조에 맞춰 아래 항목별 금액을 직접 입력해주세요."
         )
 
-        # 테이블 헤더 구성
+        # 테이블 헤더 구성 (각 열의 중앙 정렬을 위한 마크다운 또는 컬럼 배치)
         th1, th2, th3, th4 = st.columns([1.2, 1.5, 2, 1.5])
         with th1:
-            st.markdown("**구분**")
+            st.markdown("<div style='text-align: center;'><b>구분</b></div>", unsafe_allow_html=True)
         with th2:
-            st.markdown("**항목**")
+            st.markdown("<div style='text-align: center;'><b>항목</b></div>", unsafe_allow_html=True)
         with th3:
-            st.markdown("**금액**")
+            st.markdown("<div style='text-align: center;'><b>금액</b></div>", unsafe_allow_html=True)
         with th4:
-            st.markdown("**지급처**")
+            st.markdown("<div style='text-align: center;'><b>지급처</b></div>", unsafe_allow_html=True)
 
         st.markdown("---")
 
         payer_options = ["여행사", "출장자", "직접입력"]
 
-        # --- 교통비 섹션 (구분 셀 수평 정렬) ---
+        # --- 교통비 섹션 (구분 셀 수직 중앙 정렬 배치) ---
         r1_c1, r1_c2, r1_c3, r1_c4 = st.columns([1.2, 1.5, 2, 1.5])
         with r1_c1:
-            st.markdown("### 교통비")
+            st.markdown("<div style='display: flex; align-items: center; height: 45px; justify-content: center;'><b>교통비</b></div>", unsafe_allow_html=True)
         with r1_c2:
             flight_item_name = st.text_input(
                 "교통비 항목 1", value="항공권", key="f_item", label_visibility="collapsed"
@@ -434,7 +434,7 @@ with tab1:
         # --- 출장비 섹션 ---
         r3_c1, r3_c2, r3_c3, r3_c4 = st.columns([1.2, 1.5, 2, 1.5])
         with r3_c1:
-            st.markdown("### 출장비")
+            st.markdown("<div style='display: flex; align-items: center; height: 45px; justify-content: center;'><b>출장비</b></div>", unsafe_allow_html=True)
         with r3_c2:
             hotel_item_name = st.text_input(
                 "출장비 항목 1", value="숙박비", key="h_item", label_visibility="collapsed"
@@ -456,24 +456,29 @@ with tab1:
                 "출장비 항목 2", value="일당", key="d_item", label_visibility="collapsed"
             )
         with r4_c3:
+            # 일당 수정 가능하도록 text_input으로 변경 및 숫자 입력 유도
             daily_str = st.text_input(
                 "일당 금액", value="0", key="d_amt", label_visibility="collapsed"
             )
         with r4_c4:
+            # 일당 지급처도 수정 가능하도록 selectbox 유지
             daily_payer = st.selectbox(
                 "일당 지급처", payer_options, index=1, key="daily_p", label_visibility="collapsed"
             )
 
         st.markdown("---")
 
-        # --- 기타 섹션 (동적 추가/제거 가능, 안내 문구 삭제) ---
-        st.markdown("### 기타")
-
+        # --- 기타 섹션 (각 행마다 추가/제거 버튼 배치) ---
         updated_other_rows = []
+        num_rows = len(st.session_state.other_rows)
+        
         for idx, row_data in enumerate(st.session_state.other_rows):
-            oc1, oc2, oc3, oc4 = st.columns([1.2, 1.5, 2, 1.5])
+            oc1, oc2, oc3, oc4, oc5 = st.columns([1.2, 1.5, 2, 1.5, 1.2])
             with oc1:
-                st.markdown("")
+                if idx == 0:
+                    st.markdown("<div style='display: flex; align-items: center; height: 45px; justify-content: center;'><b>기타</b></div>", unsafe_allow_html=True)
+                else:
+                    st.markdown("")
             with oc2:
                 it_name = st.text_input(
                     f"기타 항목명 {idx}",
@@ -502,6 +507,18 @@ with tab1:
                     key=f"other_payer_{idx}",
                     label_visibility="collapsed",
                 )
+            with oc5:
+                # 행별 추가/제거 버튼 구성
+                btn_c1, btn_c2 = st.columns(2)
+                with btn_c1:
+                    if st.form_submit_button("➕", key=f"add_row_{idx}"):
+                        st.session_state.other_rows.insert(idx + 1, {"item": "", "amount": 0, "payer": "여행사"})
+                        st.rerun()
+                with btn_c2:
+                    if num_rows > 1:
+                        if st.form_submit_button("➖", key=f"del_row_{idx}"):
+                            st.session_state.other_rows.pop(idx)
+                            st.rerun()
 
             try:
                 parsed_amt = int(it_amt_str.replace(",", ""))
@@ -513,21 +530,6 @@ with tab1:
             )
 
         st.session_state.other_rows = updated_other_rows
-
-        col_btn1, col_btn2 = st.columns(2)
-        with col_btn1:
-            if st.form_submit_button("➕ 기타 행 추가"):
-                st.session_state.other_rows.append(
-                    {"item": "", "amount": 0, "payer": "여행사"}
-                )
-                st.rerun()
-        with col_btn2:
-            if (
-                st.form_submit_button("➖ 마지막 기타 행 제거")
-                and len(st.session_state.other_rows) > 1
-            ):
-                st.session_state.other_rows.pop()
-                st.rerun()
 
         st.markdown("---")
         submitted = st.form_submit_button(

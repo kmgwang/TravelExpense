@@ -142,18 +142,12 @@ def process_travel_data(data_list):
         else:
             applied_rate = raw_rate
 
-        user_daily = d.get("일당_입력값", 0)
-        if user_daily > 0:
-            calc_daily = user_daily
-        else:
-            calc_daily = std_daily * applied_rate * d.get("출장일수", 1)
-            calc_daily = int(calc_daily // 100 * 100)
+        # 자동 산정 로직 적용 (규정 기준 환산 후 100원 단위 절사)
+        calc_daily = std_daily * applied_rate * d.get("출장일수", 1)
+        calc_daily = int(calc_daily // 100 * 100)
         d["산정일당_원화"] = calc_daily
 
-        user_hotel = d.get("실비숙박_입력", 0)
-        if user_hotel > 0:
-            calc_hotel = user_hotel
-        elif std_hotel == "실비":
+        if std_hotel == "실비":
             calc_hotel = 0
         else:
             calc_hotel = std_hotel * applied_rate * d.get("출장박수", 0)
@@ -186,6 +180,9 @@ def process_travel_data(data_list):
                 agency_total += o_amt
             else:
                 employee_total += o_amt
+
+        # 일당과 숙박비 규정 자동 계산 금액을 직원 지급액(출장자 계좌입금액)에 반영
+        employee_total += (calc_daily + calc_hotel)
 
         d["직원_계좌입금액"] = employee_total
         d["여행사_지급액"] = agency_total
@@ -367,6 +364,16 @@ with tab1:
             f"📅 최종 산정된 출장 기간: **{calculated_nights}박 {calculated_days}일**"
         )
 
+    # 규정 단가 기반 자동 계산 수행
+    std_daily, std_hotel = get_standard_rates(region_group, position_group)
+    applied_rate = exchange_rate / 100.0 if region_group == "특" else exchange_rate
+    
+    auto_calc_daily = int((std_daily * applied_rate * calculated_days) // 100 * 100)
+    if std_hotel == "실비":
+        auto_calc_hotel = 0
+    else:
+        auto_calc_hotel = int((std_hotel * applied_rate * calculated_nights) // 100 * 100)
+
     st.markdown("---")
     with st.form("travel_input_sub_form"):
         st.subheader("💵 금액 입력")
@@ -393,17 +400,14 @@ with tab1:
         for idx, row_data in enumerate(st.session_state.transport_rows):
             tc1, tc2, tc3, tc4 = st.columns(col_ratios)
             with tc1:
-                if idx == 0:
-                    st.markdown("<div style='display: flex; align-items: center; height: 45px; justify-content: center;'><b>교통비</b></div>", unsafe_allow_html=True)
-                else:
-                    st.markdown("")
+                st.markdown("<div style='display: flex; align-items: center; height: 45px; justify-content: center;'><b>교통비</b></div>", unsafe_allow_html=True)
             with tc2:
                 t_name = st.text_input(
                     f"교통비 항목 {idx}", value=row_data["item"], key=f"t_item_{idx}", label_visibility="collapsed"
                 )
             with tc3:
                 t_amt_str = st.text_input(
-                    f"교통비 금액 {idx}", value=str(row_data["amount"]), key=f"t_amt_{idx}", label_visibility="collapsed"
+                    f"교통비 금액 {idx}", value=f"{row_data['amount']:,}" if row_data['amount'] > 0 else "0", key=f"t_amt_{idx}", label_visibility="collapsed"
                 )
             with tc4:
                 p_idx = payer_options.index(row_data["payer"]) if row_data["payer"] in payer_options else 0
@@ -435,23 +439,23 @@ with tab1:
 
         st.markdown("---")
 
-        # --- 2. 출장비 섹션 ---
+        # --- 2. 출장비 섹션 (숙박비, 일당 자동계산 반영) ---
+        st.session_state.travel_exp_rows[0]["amount"] = auto_calc_hotel
+        st.session_state.travel_exp_rows[1]["amount"] = auto_calc_daily
+
         updated_travel_exp_rows = []
         travel_exp_sum = 0
         for idx, row_data in enumerate(st.session_state.travel_exp_rows):
             tec1, tec2, tec3, tec4 = st.columns(col_ratios)
             with tec1:
-                if idx == 0:
-                    st.markdown("<div style='display: flex; align-items: center; height: 45px; justify-content: center;'><b>출장비</b></div>", unsafe_allow_html=True)
-                else:
-                    st.markdown("")
+                st.markdown("<div style='display: flex; align-items: center; height: 45px; justify-content: center;'><b>출장비</b></div>", unsafe_allow_html=True)
             with tec2:
                 te_name = st.text_input(
                     f"출장비 항목 {idx}", value=row_data["item"], key=f"te_item_{idx}", label_visibility="collapsed"
                 )
             with tec3:
                 te_amt_str = st.text_input(
-                    f"출장비 금액 {idx}", value=str(row_data["amount"]), key=f"te_amt_{idx}", label_visibility="collapsed"
+                    f"출장비 금액 {idx}", value=f"{row_data['amount']:,}", key=f"te_amt_{idx}", label_visibility="collapsed"
                 )
             with tec4:
                 p_idx = payer_options.index(row_data["payer"]) if row_data["payer"] in payer_options else 1
@@ -489,10 +493,7 @@ with tab1:
         for idx, row_data in enumerate(st.session_state.other_rows):
             oc1, oc2, oc3, oc4 = st.columns(col_ratios)
             with oc1:
-                if idx == 0:
-                    st.markdown("<div style='display: flex; align-items: center; height: 45px; justify-content: center;'><b>기타</b></div>", unsafe_allow_html=True)
-                else:
-                    st.markdown("")
+                st.markdown("<div style='display: flex; align-items: center; height: 45px; justify-content: center;'><b>기타</b></div>", unsafe_allow_html=True)
             with oc2:
                 it_name = st.text_input(
                     f"기타 항목명 {idx}",
@@ -504,7 +505,7 @@ with tab1:
             with oc3:
                 it_amt_str = st.text_input(
                     f"기타 금액 {idx}",
-                    value=str(row_data["amount"]),
+                    value=f"{row_data['amount']:,}" if row_data['amount'] > 0 else "0",
                     key=f"other_amt_{idx}",
                     label_visibility="collapsed",
                 )

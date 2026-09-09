@@ -123,14 +123,12 @@ def process_travel_data(data_list):
         else:
             applied_rate = raw_rate
 
-        # 일수(체류 기간)를 반영하여 일당 계산
         calc_daily = std_daily * applied_rate * d.get("출장일수", 1)
         d["산정일당_원화"] = int(calc_daily // 100 * 100)
 
         if std_hotel == "실비":
             calc_hotel = d.get("실비숙박_입력", 0)
         else:
-            # 숙박비는 일반적으로 (박수) 기준으로 산정
             calc_hotel = std_hotel * applied_rate * d.get("출장박수", 0)
         d["산정숙박_원화"] = int(calc_hotel // 100 * 100)
 
@@ -230,12 +228,11 @@ with tab1:
         "기타",
     ]
 
+    st.subheader("👤 출장자 정보 및 🌍 출장지 일정 설정")
     col_a, col_b = st.columns(2)
-    with col_a:
-        st.subheader("👤 출장자 정보")
-        name = st.text_input("출장자 성명")
 
-        # 부서 드롭다운 선택
+    with col_a:
+        name = st.text_input("출장자 성명")
         department = st.selectbox(
             "부서",
             department_list,
@@ -245,7 +242,7 @@ with tab1:
                 else 0
             ),
         )
-
+        # 직급과 직급 구분을 출장지/지역구분과 동일한 선상에 맞추기 위해 왼쪽 배치
         position = st.selectbox(
             "직급",
             [
@@ -283,30 +280,8 @@ with tab1:
         )
 
     with col_b:
-        st.subheader("🌍 출장지 및 일정")
         start_date = st.date_input("출장 시작일")
         end_date = st.date_input("출장 종료일")
-
-        # 출장기간(몇박 며칠) 자동 계산 로직
-        raw_days = (end_date - start_date).days + 1
-        if raw_days < 1:
-            raw_days = 1
-
-        col_d1, col_d2 = st.columns([2, 1])
-        with col_d1:
-            is_flight_plus = st.checkbox(
-                "비행기 이동 등으로 1일 추가", value=False
-            )
-
-        calculated_days = raw_days + (1 if is_flight_plus else 0)
-        calculated_nights = (
-            calculated_days - 1 if calculated_days > 1 else 0
-        )
-
-        st.info(
-            f"📅 산정된 출장 기간: **{calculated_nights}박 {calculated_days}일**"
-        )
-
         country = st.text_input("출장지 (예: 베트남, 일본 등)")
 
         auto_region = get_region_group(country) if country else "갑"
@@ -318,6 +293,29 @@ with tab1:
         )
         region_group = st.selectbox(
             "지역 구분", region_options, index=default_reg_idx
+        )
+
+    # 비행기 이동 박 추가 옵션 및 출장 기간 계산 표시
+    raw_days = (end_date - start_date).days + 1
+    if raw_days < 1:
+        raw_days = 1
+
+    st.markdown("---")
+    col_opt1, col_opt2 = st.columns([1, 2])
+    with col_opt1:
+        is_flight_minus = st.checkbox(
+            "비행기 이동 박 추가 (시차로 인한 박수 1일 차감)", value=False
+        )
+    with col_opt2:
+        calculated_days = raw_days
+        calculated_nights = (
+            calculated_days - 1 if calculated_days > 1 else 0
+        )
+        if is_flight_minus:
+            calculated_nights = max(0, calculated_nights - 1)
+
+        st.info(
+            f"📅 최종 산정된 출장 기간: **{calculated_nights}박 {calculated_days}일**"
         )
 
     st.markdown("---")
@@ -432,6 +430,7 @@ with tab2:
                 "출장지",
                 "지역구분",
                 "출장일수",
+                "출장박수",
                 "직원_계좌입금액",
                 "여행사_지급액",
                 "총출장비",
@@ -445,6 +444,7 @@ with tab2:
             "출장지",
             "지역구분",
             "출장일수",
+            "출장박수",
             "직원지급액(일비/숙박)",
             "여행사지급액(항공/보험등)",
             "총합계",

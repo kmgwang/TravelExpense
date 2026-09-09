@@ -22,6 +22,10 @@ st.markdown("---")
 if "travel_list" not in st.session_state:
     st.session_state.travel_list = []
 
+# 기타 항목 동적 행 관리를 위한 세션 상태 초기화
+if "other_rows" not in st.session_state:
+    st.session_state.other_rows = [{"item": "", "amount": 0, "payer": "여행사"}]
+
 
 # 1. 직급에 따른 직급 구분 함수
 def get_position_group(position):
@@ -134,12 +138,12 @@ def process_travel_data(data_list):
         d["산정숙박_원화"] = int(calc_hotel // 100 * 100)
 
         d["직원_계좌입금액"] = d["산정일당_원화"] + d["산정숙박_원화"]
-        d["여행사_지급액"] = (
-            d.get("항공료", 0)
-            + d.get("ESTA기타", 0)
-            + d.get("여행자보험", 0)
-            + d.get("수수료", 0)
-        )
+
+        # 기본 대행비 및 동적 기타 항목 합산
+        base_agency = d.get("항공료", 0) + d.get("ESTA기타", 0)
+        other_total = sum([row.get("amount", 0) for row in d.get("기타항목리스트", [])])
+        d["여행사_지급액"] = base_agency + other_total
+
         d["총출장비"] = d["직원_계좌입금액"] + d["여행사_지급액"]
         processed.append(d)
 
@@ -172,7 +176,7 @@ with tab1:
         )
     with col_rate_input:
         exchange_rate = st.number_input(
-            "적용 환율 입력", min_value=0.0, value=1350.0, step=1.0
+            "적용 환율 입력", min_value=0.0, value=1350.0, step=1.0, format="%.2f"
         )
 
     # 부서 목록 정의
@@ -325,7 +329,7 @@ with tab1:
     with st.form("travel_input_sub_form"):
         st.subheader("💵 실비 및 여행사 대행 경비 입력 (원화)")
         st.markdown(
-            "요청하신 표 형식의 입력 구조에 맞춰 아래 항목별 금액을 입력해주세요."
+            "요청하신 표 형식의 입력 구조에 맞춰 아래 항목별 금액을 직접 입력해주세요."
         )
 
         # 테이블 헤더 구성
@@ -341,112 +345,142 @@ with tab1:
 
         st.markdown("---")
 
-        # 행 1: 교통비 - 항공권
+        payer_options = ["여행사", "출장자", "직접입력"]
+
+        # --- 교통비 섹션 (2행 셀 병합 느낌 표현) ---
         r1_c1, r1_c2, r1_c3, r1_c4 = st.columns([1.2, 1.5, 2, 1.5])
         with r1_c1:
-            st.markdown("교통비")
+            st.markdown("### 교통비")
         with r1_c2:
-            st.markdown("항공권")
+            flight_item_name = st.text_input(
+                "교통비 항목 1", value="항공권", label_visibility="collapsed"
+            )
         with r1_c3:
-            flight = st.number_input(
-                "항공권 금액",
-                min_value=0,
-                value=0,
-                step=10000,
-                label_visibility="collapsed",
+            flight_str = st.text_input(
+                "항공권 금액", value="0", label_visibility="collapsed"
             )
         with r1_c4:
-            st.markdown("여행사")
+            flight_payer = st.selectbox(
+                "항공권 지급처", payer_options, index=0, key="flight_p"
+            )
 
-        # 행 2: 교통비 - ESTA
         r2_c1, r2_c2, r2_c3, r2_c4 = st.columns([1.2, 1.5, 2, 1.5])
         with r2_c1:
-            st.markdown("교통비")
+            st.markdown("")  # 병합 영역 공백
         with r2_c2:
-            st.markdown("ESTA")
+            esta_item_name = st.text_input(
+                "교통비 항목 2", value="ESTA", label_visibility="collapsed"
+            )
         with r2_c3:
-            esta = st.number_input(
-                "ESTA 금액",
-                min_value=0,
-                value=0,
-                step=1000,
-                label_visibility="collapsed",
+            esta_str = st.text_input(
+                "ESTA 금액", value="0", label_visibility="collapsed"
             )
         with r2_c4:
-            st.markdown("여행사")
+            esta_payer = st.selectbox(
+                "ESTA 지급처", payer_options, index=0, key="esta_p"
+            )
 
-        st.markdown("")
+        st.markdown("---")
 
-        # 행 3: 출장비 - 숙박비
+        # --- 출장비 섹션 ---
         r3_c1, r3_c2, r3_c3, r3_c4 = st.columns([1.2, 1.5, 2, 1.5])
         with r3_c1:
-            st.markdown("출장비")
+            st.markdown("### 출장비")
         with r3_c2:
-            st.markdown("숙박비")
+            hotel_item_name = st.text_input(
+                "출장비 항목 1", value="숙박비", label_visibility="collapsed"
+            )
         with r3_c3:
-            actual_hotel = st.number_input(
-                "숙박비 금액(임원 실비 등)",
-                min_value=0,
-                value=0,
-                step=10000,
-                label_visibility="collapsed",
+            hotel_str = st.text_input(
+                "숙박비 금액", value="0", label_visibility="collapsed"
             )
         with r3_c4:
-            st.markdown("출장자 (또는 실비)")
+            hotel_payer = st.selectbox(
+                "숙박비 지급처", payer_options, index=1, key="hotel_p"
+            )
 
-        # 행 4: 출장비 - 일당
         r4_c1, r4_c2, r4_c3, r4_c4 = st.columns([1.2, 1.5, 2, 1.5])
         with r4_c1:
-            st.markdown("출장비")
+            st.markdown("")  # 병합 영역 공백
         with r4_c2:
-            st.markdown("일당")
+            daily_item_name = st.text_input(
+                "출장비 항목 2", value="일당", label_visibility="collapsed"
+            )
         with r4_c3:
-            st.markdown(
-                "_규정 자동산정_"
-            )  # 일당은 자동산정되므로 빈칸 대신 안내 문구
+            st.markdown("_규정 자동산정_")
         with r4_c4:
             st.markdown("출장자")
 
-        st.markdown("")
+        st.markdown("---")
 
-        # 행 5: 기타 - 공백1 (여행자보험)
-        r5_c1, r5_c2, r5_c3, r5_c4 = st.columns([1.2, 1.5, 2, 1.5])
-        with r5_c1:
-            st.markdown("기타")
-        with r5_c2:
-            st.markdown("여행자보험 (공백1)")
-        with r5_c3:
-            insurance = st.number_input(
-                "여행자보험 금액",
-                min_value=0,
-                value=0,
-                step=1000,
-                label_visibility="collapsed",
-            )
-        with r5_c4:
-            st.markdown("여행사")
-
-        # 행 6: 기타 - 공백2 (변경/취소 수수료 등)
-        r6_c1, r6_c2, r6_c3, r6_c4 = st.columns([1.2, 1.5, 2, 1.5])
-        with r6_c1:
-            st.markdown("기타")
-        with r6_c2:
-            st.markdown("수수료 등 (공백2)")
-        with r6_c3:
-            fee = st.number_input(
-                "수수료 금액",
-                min_value=0,
-                value=0,
-                step=1000,
-                label_visibility="collapsed",
-            )
-        with r6_c4:
-            st.markdown("여행사")
-
-        st.info(
-            "※ 임원(부사장 이상)의 숙박비는 '실비'로 입력하며, 그 외 직급은 규정 정액이 자동 적용됩니다."
+        # --- 기타 섹션 (동적 추가/제거 가능) ---
+        st.markdown("### 기타")
+        st.markdown(
+            "필요에 따라 기타 행을 자유롭게 추가하거나 제거할 수 있습니다."
         )
 
+        updated_other_rows = []
+        for idx, row_data in enumerate(st.session_state.other_rows):
+            oc1, oc2, oc3, oc4 = st.columns([1.2, 1.5, 2, 1.5])
+            with oc1:
+                st.markdown("")
+            with oc2:
+                it_name = st.text_input(
+                    f"기타 항목명 {idx}",
+                    value=row_data["item"],
+                    placeholder="항목 입력",
+                    key=f"other_item_{idx}",
+                    label_visibility="collapsed",
+                )
+            with oc3:
+                it_amt_str = st.text_input(
+                    f"기타 금액 {idx}",
+                    value=str(row_data["amount"]),
+                    key=f"other_amt_{idx}",
+                    label_visibility="collapsed",
+                )
+            with oc4:
+                # 안전한 인덱스 선택
+                p_idx = (
+                    payer_options.index(row_data["payer"])
+                    if row_data["payer"] in payer_options
+                    else 0
+                )
+                it_payer = st.selectbox(
+                    f"기타 지급처 {idx}",
+                    payer_options,
+                    index=p_idx,
+                    key=f"other_payer_{idx}",
+                )
+
+            # 값 변환 저장
+            try:
+                parsed_amt = int(it_amt_str.replace(",", ""))
+            except ValueError:
+                parsed_amt = 0
+
+            updated_other_rows.append(
+                {"item": it_name, "amount": parsed_amt, "payer": it_payer}
+            )
+
+        st.session_state.other_rows = updated_other_rows
+
+        col_btn1, col_btn2 = st.columns(2)
+        with col_btn1:
+            if st.form_submit_button("➕ 기타 행 추가"):
+                st.session_state.other_rows.append(
+                    {"item": "", "amount": 0, "payer": "여행사"}
+                )
+                st.rerun()
+        with col_btn2:
+            if (
+                st.form_submit_button("➖ 마지막 기타 행 제거")
+                and len(st.session_state.other_rows) > 1
+            ):
+                st.session_state.other_rows.pop()
+                st.rerun()
+
+        st.markdown("---")
         submitted = st.form_submit_button(
             "➕ 입력한 출장 내역 규정 적용 및 추가"
         )
@@ -455,6 +489,22 @@ with tab1:
             if not name or not country:
                 st.error("⚠️ 출장자 성명과 출장지는 필수 입력 항목입니다.")
             else:
+                # 문자열 금액 안전 변환
+                try:
+                    flight_val = int(flight_str.replace(",", ""))
+                except ValueError:
+                    flight_val = 0
+
+                try:
+                    esta_val = int(esta_str.replace(",", ""))
+                except ValueError:
+                    esta_val = 0
+
+                try:
+                    hotel_val = int(hotel_str.replace(",", ""))
+                except ValueError:
+                    hotel_val = 0
+
                 new_data = {
                     "출장자성명": name,
                     "부서": department,
@@ -467,11 +517,10 @@ with tab1:
                     "출장일수": calculated_days,
                     "출장박수": calculated_nights,
                     "환율": exchange_rate,
-                    "항공료": flight,
-                    "ESTA기타": esta,
-                    "여행자보험": insurance,
-                    "수수료": fee,
-                    "실비숙박_입력": actual_hotel,
+                    "항공료": flight_val,
+                    "ESTA기타": esta_val,
+                    "실비숙박_입력": hotel_val,
+                    "기타항목리스트": st.session_state.other_rows.copy(),
                 }
                 st.session_state.travel_list.append(new_data)
                 st.success(f"✅ {name} 님의 출장 경비가 규정에 맞춰 산정되었습니다!")
@@ -493,7 +542,7 @@ with tab1:
 with tab2:
     st.header("💰 자금팀 제출용 정산 집계표 생성")
     st.markdown(
-        "출장자에게 송금할 금액(일비+숙박비)과 여행사에 송금할 금액(항공권+ESTA+보험 등)이 완벽히 분리된 자금팀 제출용 표입니다."
+        "출장자에게 송금할 금액(일비+숙박비)과 여행사에 송금할 금액 등이 완벽히 분리된 자금팀 제출용 표입니다."
     )
 
     if len(st.session_state.travel_list) > 0:

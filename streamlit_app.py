@@ -556,7 +556,7 @@ with tab1:
             )
             digits = "".join(filter(str.isdigit, amt_str))
             te_amt = int((int(digits or 0) // 1000) * 1000)
-        with tc4:
+        with tec4:
             p_idx = (
                 payer_options.index(row_data["payer"])
                 if row_data["payer"] in payer_options

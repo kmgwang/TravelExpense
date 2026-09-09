@@ -2,15 +2,18 @@ import io
 import pandas as pd
 import streamlit as st
 
-# 페이지 설정
-st.set_page_config(
-    page_title="화천기공 해외출장비 정산 자동화 프로그램",
-    page_layout="wide",
-)
+# 페이지 설정 (반드시 모든 Streamlit 명령어 및 함수 정의보다 최상단에 위치해야 합니다)
+try:
+    st.set_page_config(
+        page_title="화천기공 해외출장비 정산 자동화 프로그램",
+        page_layout="wide",
+    )
+except Exception:
+    pass  # 이미 설정된 경우 예외 무시
 
 st.title("✈️ 화천기공 해외출장비 정산 및 내역서 자동 생성 시스템")
 st.markdown(
-    "인사지원팀 해외출장 경비 산정, 자금팀 제출용 정산표 분리, 출장자용 산정 내역서 자동 생성 프로그램입니다."
+    "인사지원팀 해외출장 경비 산정, 자금팀 제출용 정산표 분리, 출장자용 산정 내역서 자동 생성 프로그램입니다[cite: 1]."
 )
 st.markdown("---")
 
@@ -20,13 +23,11 @@ uploaded_file = st.sidebar.file_uploader(
     "출장 내역 엑셀 파일을 업로드하세요", type=["xlsx", "xls"]
 )
 
-# 기본 기준 정보 설정 (엑셀이 없을 경우 테스트용 또는 기본값 적용)
 st.sidebar.subheader("📌 출장비 지급 기준 참고")
 st.sidebar.info(
     "- **여행사 지급**: 항공료, 숙박비(대행 시)\n- **직원 계좌 지급**: 일비, 식비, 현지 교통비 등"
 )
 
-# 엑셀 파일 템플릿 다운로드 제공 기능 (예시)
 with st.sidebar.expander("📥 표준 입력 엑셀 양식 구조 안내"):
     st.markdown(
         """
@@ -41,7 +42,6 @@ with st.sidebar.expander("📥 표준 입력 엑셀 양식 구조 안내"):
 
 def process_travel_data(df):
     """출장비 데이터를 기반으로 여행사 지급액과 직원 지급액을 자동 분리 계산"""
-    # 계산 로직 구현
     df["총출장비"] = (
         df.get("항공료_여행사지급", 0)
         + df.get("숙박비_여행사지급", 0)
@@ -59,20 +59,16 @@ def process_travel_data(df):
     return df
 
 
-# 메인 화면 로직
 if uploaded_file is not None:
     try:
-        # 데이터 읽기
         raw_df = pd.read_excel(uploaded_file)
         processed_df = process_travel_data(raw_df)
 
-        st.success("데이터가 성공적으로 로드되고 계산되었습니다.")
+        st.success("데이터가 성공적으로 로드되고 계산되었습니다[cite: 1].")
 
-        # 1. 전체 집계 결과 표시
         st.subheader("📊 출장비 산정 및 지급처별 집계 결과")
         st.dataframe(processed_df, use_container_width=True)
 
-        # 요약 지표
         col1, col2, col3 = st.columns(3)
         with col1:
             st.metric(
@@ -93,13 +89,11 @@ if uploaded_file is not None:
 
         st.markdown("---")
 
-        # 2. 자금팀 제출용 정산 집계표 다운로드
         st.subheader("📑 자금팀 제출용 정산 집계표")
         st.markdown(
-            "자금팀 송금 요청을 위한 여행사/직원 지급액 분리 내역서입니다."
+            "자금팀 송금 요청을 위한 여행사/직원 지급액 분리 내역서입니다[cite: 1]."
         )
 
-        # 엑셀 다운로드 버퍼 생성
         output_agency = io.BytesIO()
         with pd.ExcelWriter(output_agency, engine="openpyxl") as writer:
             processed_df.to_excel(
@@ -116,7 +110,6 @@ if uploaded_file is not None:
 
         st.markdown("---")
 
-        # 3. 출장자용 산정 내역서 개별 생성
         st.subheader("👤 출장자 개인별 산정 내역서 조회 및 다운로드")
         selected_person = st.selectbox(
             "출장자를 선택하세요", processed_df["출장자성명"].unique()
@@ -127,7 +120,7 @@ if uploaded_file is not None:
         ].iloc[0]
 
         st.markdown(
-            f"**[ {selected_person} ] 님의 해외출장비 산정 내역**"
+            f"**[ {selected_person} ] 님의 해외출장비 산정 내역**[cite: 1]"
         )
 
         detail_col1, detail_col2 = st.columns(2)
@@ -149,7 +142,6 @@ if uploaded_file is not None:
                 f"- **총 경비 합계**: {person_data.get('총출장비', 0):,.0f} 원"
             )
 
-        # 개인별 내역서 엑셀 다운로드
         output_person = io.BytesIO()
         with pd.ExcelWriter(output_person, engine="openpyxl") as writer:
             pd.DataFrame([person_data]).to_excel(
@@ -171,10 +163,9 @@ if uploaded_file is not None:
 
 else:
     st.info(
-        "👋 사이드바에서 출장 내역 엑셀 파일을 업로드하면 정산 프로그램이 구동됩니다."
+        "👋 사이드바에서 출장 내역 엑셀 파일을 업로드하면 정산 프로그램이 구동됩니다[cite: 1]."
     )
 
-    # 테스트용 가상 데이터 안내
     with st.expander("💡 표준 엑셀 입력 양식 예시 보기"):
         sample_data = pd.DataFrame(
             {

@@ -191,22 +191,6 @@ def process_travel_data(data_list):
     return pd.DataFrame(processed)
 
 
-# 행 호버 시 버튼 표시를 위한 CSS 스타일 적용
-st.markdown(
-    """
-    <style>
-    .hover-action-container {
-        opacity: 0;
-        transition: opacity 0.2s ease-in-out;
-    }
-    div[data-testid="column"]:hover .hover-action-container {
-        opacity: 1;
-    }
-    </style>
-    """,
-    unsafe_allow_html=True,
-)
-
 # 3가지 탭 구성
 tab1, tab2, tab3 = st.tabs(
     [
@@ -484,7 +468,7 @@ with tab1:
 
         st.markdown("---")
 
-        # --- 기타 섹션 (커서 호버 시 버튼 표시 및 행별 추가/제거) ---
+        # --- 기타 섹션 (마지막 행에만 ➕, ➖ 버튼 배치) ---
         updated_other_rows = []
         num_rows = len(st.session_state.other_rows)
         
@@ -524,19 +508,20 @@ with tab1:
                     label_visibility="collapsed",
                 )
             with oc5:
-                # 호버 시 나타나는 버튼 영역 컨테이너 적용
-                st.markdown('<div class="hover-action-container">', unsafe_allow_html=True)
-                btn_c1, btn_c2 = st.columns(2)
-                with btn_c1:
-                    if st.form_submit_button("➕", key=f"add_row_{idx}"):
-                        st.session_state.other_rows.insert(idx + 1, {"item": "", "amount": 0, "payer": "여행사"})
-                        st.rerun()
-                with btn_c2:
-                    if num_rows > 1:
-                        if st.form_submit_button("➖", key=f"del_row_{idx}"):
-                            st.session_state.other_rows.pop(idx)
+                # 마지막 행에만 ➕, ➖ 버튼 표시
+                if idx == num_rows - 1:
+                    btn_c1, btn_c2 = st.columns(2)
+                    with btn_c1:
+                        if st.form_submit_button("➕", key=f"add_row_{idx}"):
+                            st.session_state.other_rows.append({"item": "", "amount": 0, "payer": "여행사"})
                             st.rerun()
-                st.markdown('</div>', unsafe_allow_html=True)
+                    with btn_c2:
+                        if num_rows > 1:
+                            if st.form_submit_button("➖", key=f"del_row_{idx}"):
+                                st.session_state.other_rows.pop()
+                                st.rerun()
+                else:
+                    st.markdown("")
 
             try:
                 parsed_amt = int(it_amt_str.replace(",", ""))

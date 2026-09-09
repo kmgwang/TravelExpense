@@ -370,7 +370,7 @@ with tab1:
             "요청하신 표 형식의 입력 구조에 맞춰 아래 항목별 금액을 직접 입력해주세요."
         )
 
-        # 열 비율 정의 (5열 구조: 구분, 항목, 금액, 지급처, 버튼공간)
+        # 열 비율 정의 (5열 구조: 구분, 항목, 금액, 지급처, 공백)
         col_ratios = [1.2, 1.5, 2, 1.5, 1.0]
 
         # 테이블 헤더 구성 (각 열 중앙 정렬)
@@ -468,9 +468,9 @@ with tab1:
 
         st.markdown("---")
 
-        # --- 기타 섹션 (마지막 행에만 ➕, ➖ 버튼 배치) ---
+        # --- 기타 섹션 ---
         updated_other_rows = []
-        num_rows = len(st.session_state.other_rows)
+        num_other_rows = len(st.session_state.other_rows)
         
         for idx, row_data in enumerate(st.session_state.other_rows):
             oc1, oc2, oc3, oc4, oc5 = st.columns(col_ratios)
@@ -508,20 +508,7 @@ with tab1:
                     label_visibility="collapsed",
                 )
             with oc5:
-                # 마지막 행에만 ➕, ➖ 버튼 표시
-                if idx == num_rows - 1:
-                    btn_c1, btn_c2 = st.columns(2)
-                    with btn_c1:
-                        if st.form_submit_button("➕", key=f"add_row_{idx}"):
-                            st.session_state.other_rows.append({"item": "", "amount": 0, "payer": "여행사"})
-                            st.rerun()
-                    with btn_c2:
-                        if num_rows > 1:
-                            if st.form_submit_button("➖", key=f"del_row_{idx}"):
-                                st.session_state.other_rows.pop()
-                                st.rerun()
-                else:
-                    st.markdown("")
+                st.markdown("")
 
             try:
                 parsed_amt = int(it_amt_str.replace(",", ""))
@@ -533,6 +520,18 @@ with tab1:
             )
 
         st.session_state.other_rows = updated_other_rows
+
+        # --- 기타 섹션 바로 아래 전체 행 길이를 절반으로 나누어 "+"와 "-" 버튼 배치 ---
+        btn_c1, btn_c2 = st.columns(2)
+        with btn_c1:
+            if st.form_submit_button("➕ 행 추가", use_container_width=True):
+                st.session_state.other_rows.append({"item": "", "amount": 0, "payer": "여행사"})
+                st.rerun()
+        with btn_c2:
+            if st.form_submit_button("➖ 행 삭제", use_container_width=True):
+                if len(st.session_state.other_rows) > 1:
+                    st.session_state.other_rows.pop()
+                    st.rerun()
 
         st.markdown("---")
         submitted = st.form_submit_button(

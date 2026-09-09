@@ -12,7 +12,7 @@ try:
 except Exception:
     pass
 
-# 입력란 정렬 및 총계/총액 행 배경 전체 채우기 위한 커스텀 CSS
+# 입력란 정렬, 총계/총액 행 배경 전체 채우기 및 숫자 입력 필드의 스피너(+/-) 버튼 숨기기 위한 커스텀 CSS
 st.markdown(
     """
     <style>
@@ -21,6 +21,15 @@ st.markdown(
     }
     input[aria-label*="금액"] {
         text-align: right !important;
+    }
+    /* 숫자 입력 필드의 증감(+/-) 버튼 제거 */
+    input[type=number]::-webkit-inner-spin-button, 
+    input[type=number]::-webkit-outer-spin-button { 
+        -webkit-appearance: none; 
+        margin: 0; 
+    }
+    input[type=number] {
+        -moz-appearance: textfield;
     }
     /* 총계 및 총액 행 배경을 셀 전체로 확장하기 위한 스타일 */
     .row-highlight-yellow {
@@ -169,14 +178,14 @@ def process_travel_data(data_list):
             applied_rate = raw_rate
 
         calc_daily = std_daily * applied_rate * d.get("출장일수", 1)
-        calc_daily = int(calc_daily // 100 * 100)
+        calc_daily = int(calc_daily // 1000 * 1000)
         d["산정일당_원화"] = calc_daily
 
         if std_hotel == "실비":
             calc_hotel = 0
         else:
             calc_hotel = std_hotel * applied_rate * d.get("출장박수", 0)
-            calc_hotel = int(calc_hotel // 100 * 100)
+            calc_hotel = int(calc_hotel // 1000 * 1000)
         d["산정숙박_원화"] = calc_hotel
 
         agency_total = 0
@@ -386,26 +395,24 @@ with tab1:
             f"📅 최종 산정된 출장 기간: **{calculated_nights}박 {calculated_days}일**"
         )
 
-    # 규정 단가 기반 자동 계산 수행
+    # 규정 단가 기반 자동 계산 수행 (백단위 이하 절사 반영)
     std_daily, std_hotel = get_standard_rates(region_group, position_group)
     applied_rate = (
         exchange_rate / 100.0 if region_group == "특" else exchange_rate
     )
 
     auto_calc_daily = int(
-        (std_daily * applied_rate * calculated_days) // 100 * 100
+        (std_daily * applied_rate * calculated_days) // 1000 * 1000
     )
     if std_hotel == "실비":
         auto_calc_hotel = 0
     else:
         auto_calc_hotel = int(
-            (std_hotel * applied_rate * calculated_nights) // 100 * 100
+            (std_hotel * applied_rate * calculated_nights) // 1000 * 1000
         )
 
     st.markdown("---")
     st.subheader("💵 금액 입력")
-    
-    # 금액 입력 제목과 항목 헤더 사이에 공백행 추가
     st.markdown("<br>", unsafe_allow_html=True)
 
     col_ratios = [1.2, 1.5, 2, 1.5]
@@ -454,8 +461,8 @@ with tab1:
                 label_visibility="collapsed",
             )
         with tc3:
-            # st.number_input을 사용하여 실시간 합계 반영 및 천 단위 콤마(,) 자동 표시 지원
-            t_amt = st.number_input(
+            # 입력값에서 백단위 이하 절사(천원단위 표시) 적용 및 스피너 제거
+            raw_t_amt = st.number_input(
                 f"교통비 금액 {idx}",
                 min_value=0,
                 value=int(row_data["amount"]),
@@ -464,6 +471,7 @@ with tab1:
                 key=f"t_amt_{idx}",
                 label_visibility="collapsed",
             )
+            t_amt = int((raw_t_amt // 1000) * 1000)
         with tc4:
             p_idx = (
                 payer_options.index(row_data["payer"])
@@ -485,7 +493,7 @@ with tab1:
 
     st.session_state.transport_rows = updated_transport_rows
 
-    # 교통비 총계 행 (배경 상하단 전체 채우기)
+    # 교통비 총계 행
     sc1, sc2, sc3, sc4 = st.columns(col_ratios)
     with sc1:
         st.markdown("")
@@ -504,9 +512,13 @@ with tab1:
 
     st.markdown("---")
 
-    # --- 2. 출장비 섹션 (숙박비, 일당 자동계산 반영) ---
-    st.session_state.travel_exp_rows[0]["amount"] = auto_calc_hotel
-    st.session_state.travel_exp_rows[1]["amount"] = auto_calc_daily
+    # --- 2. 출장비 섹션 (숙박비, 일당 자동계산 반영 - 백단위 이하 절사) ---
+    st.session_state.travel_exp_rows[0]["amount"] = int(
+        (auto_calc_hotel // 1000) * 1000
+    )
+    st.session_state.travel_exp_rows[1]["amount"] = int(
+        (auto_calc_daily // 1000) * 1000
+    )
 
     updated_travel_exp_rows = []
     travel_exp_sum = 0
@@ -525,7 +537,7 @@ with tab1:
                 label_visibility="collapsed",
             )
         with tec3:
-            te_amt = st.number_input(
+            raw_te_amt = st.number_input(
                 f"출장비 금액 {idx}",
                 min_value=0,
                 value=int(row_data["amount"]),
@@ -534,6 +546,7 @@ with tab1:
                 key=f"te_amt_{idx}",
                 label_visibility="collapsed",
             )
+            te_amt = int((raw_te_amt // 1000) * 1000)
         with tec4:
             p_idx = (
                 payer_options.index(row_data["payer"])
@@ -555,7 +568,7 @@ with tab1:
 
     st.session_state.travel_exp_rows = updated_travel_exp_rows
 
-    # 출장비 총계 행 (배경 상하단 전체 채우기)
+    # 출장비 총계 행
     tc1, tc2, tc3, tc4 = st.columns(col_ratios)
     with tc1:
         st.markdown("")
@@ -593,7 +606,7 @@ with tab1:
                 label_visibility="collapsed",
             )
         with oc3:
-            it_amt = st.number_input(
+            raw_it_amt = st.number_input(
                 f"기타 금액 {idx}",
                 min_value=0,
                 value=int(row_data["amount"]),
@@ -602,6 +615,7 @@ with tab1:
                 key=f"other_amt_{idx}",
                 label_visibility="collapsed",
             )
+            it_amt = int((raw_it_amt // 1000) * 1000)
         with oc4:
             p_idx = (
                 payer_options.index(row_data["payer"])
@@ -641,7 +655,7 @@ with tab1:
         else:
             st.markdown("")
 
-    # 기타 총계 행 (배경 상하단 전체 채우기)
+    # 기타 총계 행
     oc1, oc2, oc3, oc4 = st.columns(col_ratios)
     with oc1:
         st.markdown("")
@@ -660,7 +674,7 @@ with tab1:
 
     st.markdown("---")
 
-    # --- 4. 총액 행 (구분 총계들의 합계, 배경 상하단 전체 채우기) ---
+    # --- 4. 총액 행 ---
     grand_total = transport_sum + travel_exp_sum + other_sum
     tot_c1, tot_c2, tot_c3, tot_c4 = st.columns(col_ratios)
     with tot_c1:

@@ -12,7 +12,7 @@ try:
 except Exception:
     pass
 
-# 입력란 텍스트 정렬을 위한 커스텀 CSS (항목은 가운데 정렬, 금액은 오른쪽 정렬)
+# 입력란 정렬 및 총계/총액 행 배경 전체 채우기 위한 커스텀 CSS
 st.markdown(
     """
     <style>
@@ -21,6 +21,19 @@ st.markdown(
     }
     input[aria-label*="금액"] {
         text-align: right !important;
+    }
+    /* 총계 및 총액 행 배경을 셀 전체로 확장하기 위한 스타일 */
+    .row-highlight-yellow {
+        background-color: #fff9c4;
+        padding: 8px 12px;
+        border-radius: 4px;
+        width: 100%;
+    }
+    .row-highlight-blue {
+        background-color: #e1f5fe;
+        padding: 10px 12px;
+        border-radius: 4px;
+        width: 100%;
     }
     </style>
 """,
@@ -392,6 +405,9 @@ with tab1:
     st.markdown("---")
     with st.form("travel_input_sub_form"):
         st.subheader("💵 금액 입력")
+        
+        # 금액 입력 제목과 항목 헤더 사이에 공백행 추가
+        st.markdown("<br>", unsafe_allow_html=True)
 
         col_ratios = [1.2, 1.5, 2, 1.5]
 
@@ -439,13 +455,10 @@ with tab1:
                     label_visibility="collapsed",
                 )
             with tc3:
-                t_amt_str = st.text_input(
+                # 입력 시점에 천 단위 콤마 반영
+                t_amt_val = st.text_input(
                     f"교통비 금액 {idx}",
-                    value=(
-                        f"{row_data['amount']:,}"
-                        if row_data["amount"] > 0
-                        else "0"
-                    ),
+                    value=f"{row_data['amount']:,}" if row_data['amount'] > 0 else "0",
                     key=f"t_amt_{idx}",
                     label_visibility="collapsed",
                 )
@@ -464,7 +477,7 @@ with tab1:
                 )
 
             try:
-                parsed_amt = int(t_amt_str.replace(",", ""))
+                parsed_amt = int(t_amt_val.replace(",", ""))
             except ValueError:
                 parsed_amt = 0
 
@@ -475,26 +488,22 @@ with tab1:
 
         st.session_state.transport_rows = updated_transport_rows
 
-        # 교통비 총계 행 (노란색 배경)
+        # 교통비 총계 행 (배경 상하단 전체 채우기)
         sc1, sc2, sc3, sc4 = st.columns(col_ratios)
         with sc1:
             st.markdown("")
         with sc2:
             st.markdown(
-                "<div style='text-align: right;'><b>교통비 총계</b></div>",
+                "<div class='row-highlight-yellow' style='text-align: right;'><b>교통비 총계</b></div>",
                 unsafe_allow_html=True,
             )
         with sc3:
             st.markdown(
-                f"<div style='text-align: right;'><b>{transport_sum:,.0f} 원</b></div>",
+                f"<div class='row-highlight-yellow' style='text-align: right;'><b>{transport_sum:,.0f} 원</b></div>",
                 unsafe_allow_html=True,
             )
         with sc4:
             st.markdown("")
-        st.markdown(
-            "<div style='background-color: #fff9c4; padding: 2px; border-radius: 4px;'></div>",
-            unsafe_allow_html=True,
-        )
 
         st.markdown("---")
 
@@ -519,9 +528,9 @@ with tab1:
                     label_visibility="collapsed",
                 )
             with tec3:
-                te_amt_str = st.text_input(
+                te_amt_val = st.text_input(
                     f"출장비 금액 {idx}",
-                    value=f"{row_data['amount']:,}",
+                    value=f"{row_data['amount']:,}" if row_data['amount'] > 0 else "0",
                     key=f"te_amt_{idx}",
                     label_visibility="collapsed",
                 )
@@ -540,7 +549,7 @@ with tab1:
                 )
 
             try:
-                parsed_amt = int(te_amt_str.replace(",", ""))
+                parsed_amt = int(te_amt_val.replace(",", ""))
             except ValueError:
                 parsed_amt = 0
 
@@ -551,26 +560,22 @@ with tab1:
 
         st.session_state.travel_exp_rows = updated_travel_exp_rows
 
-        # 출장비 총계 행 (노란색 배경)
+        # 출장비 총계 행 (배경 상하단 전체 채우기)
         tc1, tc2, tc3, tc4 = st.columns(col_ratios)
         with tc1:
             st.markdown("")
         with tc2:
             st.markdown(
-                "<div style='text-align: right;'><b>출장비 총계</b></div>",
+                "<div class='row-highlight-yellow' style='text-align: right;'><b>출장비 총계</b></div>",
                 unsafe_allow_html=True,
             )
         with tc3:
             st.markdown(
-                f"<div style='text-align: right;'><b>{travel_exp_sum:,.0f} 원</b></div>",
+                f"<div class='row-highlight-yellow' style='text-align: right;'><b>{travel_exp_sum:,.0f} 원</b></div>",
                 unsafe_allow_html=True,
             )
         with tc4:
             st.markdown("")
-        st.markdown(
-            "<div style='background-color: #fff9c4; padding: 2px; border-radius: 4px;'></div>",
-            unsafe_allow_html=True,
-        )
 
         st.markdown("---")
 
@@ -593,7 +598,7 @@ with tab1:
                     label_visibility="collapsed",
                 )
             with oc3:
-                it_amt_str = st.text_input(
+                it_amt_val = st.text_input(
                     f"기타 금액 {idx}",
                     value=(
                         f"{row_data['amount']:,}"
@@ -618,7 +623,7 @@ with tab1:
                 )
 
             try:
-                parsed_amt = int(it_amt_str.replace(",", ""))
+                parsed_amt = int(it_amt_val.replace(",", ""))
             except ValueError:
                 parsed_amt = 0
 
@@ -649,50 +654,42 @@ with tab1:
             else:
                 st.markdown("")
 
-        # 기타 총계 행 (노란색 배경)
+        # 기타 총계 행 (배경 상하단 전체 채우기)
         oc1, oc2, oc3, oc4 = st.columns(col_ratios)
         with oc1:
             st.markdown("")
         with oc2:
             st.markdown(
-                "<div style='text-align: right;'><b>기타 총계</b></div>",
+                "<div class='row-highlight-yellow' style='text-align: right;'><b>기타 총계</b></div>",
                 unsafe_allow_html=True,
             )
         with oc3:
             st.markdown(
-                f"<div style='text-align: right;'><b>{other_sum:,.0f} 원</b></div>",
+                f"<div class='row-highlight-yellow' style='text-align: right;'><b>{other_sum:,.0f} 원</b></div>",
                 unsafe_allow_html=True,
             )
         with oc4:
             st.markdown("")
-        st.markdown(
-            "<div style='background-color: #fff9c4; padding: 2px; border-radius: 4px;'></div>",
-            unsafe_allow_html=True,
-        )
 
         st.markdown("---")
 
-        # --- 4. 총액 행 (전체 금액 합계, 하늘색 배경) ---
+        # --- 4. 총액 행 (전체 금액 합계, 배경 상하단 전체 채우기) ---
         grand_total = transport_sum + travel_exp_sum + other_sum
         tot_c1, tot_c2, tot_c3, tot_c4 = st.columns(col_ratios)
         with tot_c1:
             st.markdown("")
         with tot_c2:
             st.markdown(
-                "<div style='text-align: right;'><span style='font-size: 1.1em;'><b>총액</b></span></div>",
+                "<div class='row-highlight-blue' style='text-align: right;'><span style='font-size: 1.1em;'><b>총액</b></span></div>",
                 unsafe_allow_html=True,
             )
         with tot_c3:
             st.markdown(
-                f"<div style='text-align: right;'><span style='font-size: 1.1em; color: #000000;'><b>{grand_total:,.0f} 원</b></span></div>",
+                f"<div class='row-highlight-blue' style='text-align: right;'><span style='font-size: 1.1em; color: #000000;'><b>{grand_total:,.0f} 원</b></span></div>",
                 unsafe_allow_html=True,
             )
         with tot_c4:
             st.markdown("")
-        st.markdown(
-            "<div style='background-color: #e1f5fe; padding: 4px; border-radius: 4px;'></div>",
-            unsafe_allow_html=True,
-        )
 
         st.markdown("---")
         submitted = st.form_submit_button(

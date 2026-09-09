@@ -174,7 +174,6 @@ with tab2:
     processed_df = process_travel_data(st.session_state.travel_list)
 
     if not processed_df.empty:
-        # 요약 지표 카드
         m1, m2, m3 = st.columns(3)
         with m1:
             st.metric(
@@ -197,7 +196,6 @@ with tab2:
         st.subheader("📑 자금팀 송금 요청 집계 미리보기")
         st.dataframe(processed_df, use_container_width=True)
 
-        # 엑셀 다운로드 처리
         output_agency = io.BytesIO()
         with pd.ExcelWriter(output_agency, engine="openpyxl") as writer:
             processed_df.to_excel(
@@ -238,9 +236,7 @@ with tab3:
         ].iloc[0]
 
         st.markdown("---")
-        st.markdown(
-            f"### 👤 [ {selected_person} ] 님 해외출장비 산정 내역서"[cite: 1]
-        )
+        st.markdown(f"### 👤 [ {selected_person} ] 님 해외출장비 산정 내역서")
 
         det_c1, det_c2 = st.columns(2)
         with det_c1:
@@ -261,7 +257,6 @@ with tab3:
             """
             )
 
-        # 상세 항목 표
         detail_table = pd.DataFrame(
             {
                 "구분": [
@@ -286,7 +281,6 @@ with tab3:
         )
         st.table(detail_table)
 
-        # 개인별 내역서 엑셀 다운로드
         output_person = io.BytesIO()
         with pd.ExcelWriter(output_person, engine="openpyxl") as writer:
             pd.DataFrame([person_data]).to_excel(

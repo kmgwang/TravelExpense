@@ -1,3 +1,4 @@
+import datetime
 import io
 import pandas as pd
 import streamlit as st
@@ -242,7 +243,6 @@ with tab1:
                 else 0
             ),
         )
-        # 직급과 직급 구분을 출장지/지역구분과 동일한 선상에 맞추기 위해 왼쪽 배치
         position = st.selectbox(
             "직급",
             [
@@ -280,8 +280,12 @@ with tab1:
         )
 
     with col_b:
-        start_date = st.date_input("출장 시작일")
-        end_date = st.date_input("출장 종료일")
+        # 기본값: 출장 시작일은 내일, 종료일은 일주일 뒤(7일 뒤)
+        default_start = datetime.date.today() + datetime.timedelta(days=1)
+        default_end = default_start + datetime.timedelta(days=7)
+
+        start_date = st.date_input("출장 시작일", value=default_start)
+        end_date = st.date_input("출장 종료일", value=default_end)
         country = st.text_input("출장지 (예: 베트남, 일본 등)")
 
         auto_region = get_region_group(country) if country else "갑"
@@ -295,7 +299,7 @@ with tab1:
             "지역 구분", region_options, index=default_reg_idx
         )
 
-    # 비행기 이동 박 추가 옵션 및 출장 기간 계산 표시
+    # 기내 박 적용 옵션 및 출장 기간 계산 표시
     raw_days = (end_date - start_date).days + 1
     if raw_days < 1:
         raw_days = 1
@@ -304,7 +308,7 @@ with tab1:
     col_opt1, col_opt2 = st.columns([1, 2])
     with col_opt1:
         is_flight_minus = st.checkbox(
-            "비행기 이동 박 추가 (시차로 인한 박수 1일 차감)", value=False
+            "기내 박 적용(숙박 1박 차감)", value=False
         )
     with col_opt2:
         calculated_days = raw_days

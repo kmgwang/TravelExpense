@@ -12,7 +12,7 @@ try:
 except Exception:
     pass
 
-# 입력란 정렬 및 총계/총액 행 배경 전체 채우기 위한 커스텀 CSS
+# 입력란 정렬 및 총계/총액 행 배경 및 정렬을 위한 커스텀 CSS
 st.markdown(
     """
     <style>
@@ -22,17 +22,23 @@ st.markdown(
     input[aria-label*="금액"] {
         text-align: right !important;
     }
+    div[data-baseweb="select"] * {
+        text-align: center !important;
+        justify-content: center !important;
+    }
     .row-highlight-yellow {
         background-color: #fff9c4;
         padding: 8px 12px;
         border-radius: 4px;
         width: 100%;
+        text-align: center !important;
     }
     .row-highlight-blue {
         background-color: #e1f5fe;
         padding: 10px 12px;
         border-radius: 4px;
         width: 100%;
+        text-align: center !important;
     }
     </style>
 """,
@@ -436,7 +442,7 @@ with tab1:
         )
     with th3:
         st.markdown(
-            "<div style='text-align: center;'><b>금액 (천원단위 콤마 표시)</b></div>",
+            "<div style='text-align: center;'><b>금액</b></div>",
             unsafe_allow_html=True,
         )
     with th4:
@@ -515,7 +521,7 @@ with tab1:
         st.markdown("")
     with sc2:
         st.markdown(
-            "<div class='row-highlight-yellow' style='text-align: right;'><b>교통비 총계</b></div>",
+            "<div class='row-highlight-yellow' style='text-align: center;'><b>교통비 총계</b></div>",
             unsafe_allow_html=True,
         )
     with sc3:
@@ -593,7 +599,7 @@ with tab1:
         st.markdown("")
     with tc2:
         st.markdown(
-            "<div class='row-highlight-yellow' style='text-align: right;'><b>출장비 총계</b></div>",
+            "<div class='row-highlight-yellow' style='text-align: center;'><b>출장비 총계</b></div>",
             unsafe_allow_html=True,
         )
     with tc3:
@@ -692,7 +698,7 @@ with tab1:
         st.markdown("")
     with oc2:
         st.markdown(
-            "<div class='row-highlight-yellow' style='text-align: right;'><b>기타 총계</b></div>",
+            "<div class='row-highlight-yellow' style='text-align: center;'><b>기타 총계</b></div>",
             unsafe_allow_html=True,
         )
     with oc3:
@@ -712,7 +718,7 @@ with tab1:
         st.markdown("")
     with tot_c2:
         st.markdown(
-            "<div class='row-highlight-blue' style='text-align: right;'><span style='font-size: 1.1em;'><b>총액</b></span></div>",
+            "<div class='row-highlight-blue' style='text-align: center;'><span style='font-size: 1.1em;'><b>총액</b></span></div>",
             unsafe_allow_html=True,
         )
     with tot_c3:

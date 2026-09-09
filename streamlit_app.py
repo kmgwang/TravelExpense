@@ -229,7 +229,7 @@ with tab1:
         "기타",
     ]
 
-    st.subheader(" 🌍출장 정보 설정")
+    st.subheader("👤 출장자 정보 및 🌍 출장지 일정 설정")
     col_a, col_b = st.columns(2)
 
     with col_a:
@@ -324,32 +324,128 @@ with tab1:
     st.markdown("---")
     with st.form("travel_input_sub_form"):
         st.subheader("💵 실비 및 여행사 대행 경비 입력 (원화)")
-        col_c, col_d = st.columns(2)
-        with col_c:
-            st.markdown("##### [ 여행사 송금 항목 ]")
+        st.markdown(
+            "요청하신 표 형식의 입력 구조에 맞춰 아래 항목별 금액을 입력해주세요."
+        )
+
+        # 테이블 헤더 구성
+        th1, th2, th3, th4 = st.columns([1.2, 1.5, 2, 1.5])
+        with th1:
+            st.markdown("**구분**")
+        with th2:
+            st.markdown("**항목**")
+        with th3:
+            st.markdown("**금액**")
+        with th4:
+            st.markdown("**지급처**")
+
+        st.markdown("---")
+
+        # 행 1: 교통비 - 항공권
+        r1_c1, r1_c2, r1_c3, r1_c4 = st.columns([1.2, 1.5, 2, 1.5])
+        with r1_c1:
+            st.markdown("교통비")
+        with r1_c2:
+            st.markdown("항공권")
+        with r1_c3:
             flight = st.number_input(
-                "항공료", min_value=0, value=0, step=10000
-            )
-            esta = st.number_input(
-                "ESTA / 비자 비용", min_value=0, value=0, step=1000
-            )
-            insurance = st.number_input(
-                "여행자 보험", min_value=0, value=0, step=1000
-            )
-            fee = st.number_input(
-                "변경/취소 수수료", min_value=0, value=0, step=1000
-            )
-        with col_d:
-            st.markdown("##### [ 숙박비 실비 적용 대상자용 ]")
-            actual_hotel = st.number_input(
-                "숙박비 실비 (임원 부사장 이상인 경우 입력)",
+                "항공권 금액",
                 min_value=0,
                 value=0,
                 step=10000,
+                label_visibility="collapsed",
             )
-            st.info(
-                "※ 임원(부사장 이상)의 숙박비는 '실비'로 적용되며, 그 외 직급은 규정 정액이 자동 적용됩니다."
+        with r1_c4:
+            st.markdown("여행사")
+
+        # 행 2: 교통비 - ESTA
+        r2_c1, r2_c2, r2_c3, r2_c4 = st.columns([1.2, 1.5, 2, 1.5])
+        with r2_c1:
+            st.markdown("교통비")
+        with r2_c2:
+            st.markdown("ESTA")
+        with r2_c3:
+            esta = st.number_input(
+                "ESTA 금액",
+                min_value=0,
+                value=0,
+                step=1000,
+                label_visibility="collapsed",
             )
+        with r2_c4:
+            st.markdown("여행사")
+
+        st.markdown("")
+
+        # 행 3: 출장비 - 숙박비
+        r3_c1, r3_c2, r3_c3, r3_c4 = st.columns([1.2, 1.5, 2, 1.5])
+        with r3_c1:
+            st.markdown("출장비")
+        with r3_c2:
+            st.markdown("숙박비")
+        with r3_c3:
+            actual_hotel = st.number_input(
+                "숙박비 금액(임원 실비 등)",
+                min_value=0,
+                value=0,
+                step=10000,
+                label_visibility="collapsed",
+            )
+        with r3_c4:
+            st.markdown("출장자 (또는 실비)")
+
+        # 행 4: 출장비 - 일당
+        r4_c1, r4_c2, r4_c3, r4_c4 = st.columns([1.2, 1.5, 2, 1.5])
+        with r4_c1:
+            st.markdown("출장비")
+        with r4_c2:
+            st.markdown("일당")
+        with r4_c3:
+            st.markdown(
+                "_규정 자동산정_"
+            )  # 일당은 자동산정되므로 빈칸 대신 안내 문구
+        with r4_c4:
+            st.markdown("출장자")
+
+        st.markdown("")
+
+        # 행 5: 기타 - 공백1 (여행자보험)
+        r5_c1, r5_c2, r5_c3, r5_c4 = st.columns([1.2, 1.5, 2, 1.5])
+        with r5_c1:
+            st.markdown("기타")
+        with r5_c2:
+            st.markdown("여행자보험 (공백1)")
+        with r5_c3:
+            insurance = st.number_input(
+                "여행자보험 금액",
+                min_value=0,
+                value=0,
+                step=1000,
+                label_visibility="collapsed",
+            )
+        with r5_c4:
+            st.markdown("여행사")
+
+        # 행 6: 기타 - 공백2 (변경/취소 수수료 등)
+        r6_c1, r6_c2, r6_c3, r6_c4 = st.columns([1.2, 1.5, 2, 1.5])
+        with r6_c1:
+            st.markdown("기타")
+        with r6_c2:
+            st.markdown("수수료 등 (공백2)")
+        with r6_c3:
+            fee = st.number_input(
+                "수수료 금액",
+                min_value=0,
+                value=0,
+                step=1000,
+                label_visibility="collapsed",
+            )
+        with r6_c4:
+            st.markdown("여행사")
+
+        st.info(
+            "※ 임원(부사장 이상)의 숙박비는 '실비'로 입력하며, 그 외 직급은 규정 정액이 자동 적용됩니다."
+        )
 
         submitted = st.form_submit_button(
             "➕ 입력한 출장 내역 규정 적용 및 추가"
@@ -539,7 +635,7 @@ with tab3:
                 ],
                 "산정 금액 (원화)": [
                     f"{person_data.get('산정일당_원화', 0):,.0f} 원",
-                    hotel_land := hotel_display,
+                    hotel_display,
                     f"{person_data.get('여행사_지급액', 0):,.0f} 원",
                 ],
                 "지급처 및 비고": [

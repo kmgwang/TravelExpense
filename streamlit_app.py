@@ -115,7 +115,7 @@ def get_region_by_location(loc):
     group_eul = ["중국"]
     group_byeong = [
         "베트남", "태국", "말레이시아", "인도네시아", "필리핀", "싱가포르", "미얀마", "캄보디아", "라오스", "브루나이",
-        "인도", "파키스탄", "방글라데시", "스리랑카", "네パール", "부탄", "몰디브",
+        "인도", "파키스탄", "방글라데시", "스리랑카", "네팔", "부탄", "몰디브",
         "카자흐스탄", "우즈베키스탄", "투르크메니스탄", "키르기스스탄", "타지키스탄", "몽골"
     ]
     group_teuk = ["일본"]
@@ -223,7 +223,6 @@ tab1, tab2, tab3 = st.tabs([
 with tab1:
     st.subheader("📝 출장자 정보 등록 및 관리")
     
-    # 엔터키 제출 방지용 on_submit 빈 함수 처리 적용
     with st.form("traveler_form", clear_on_submit=False, enter_to_submit=False):
         c1, c2 = st.columns(2)
         with c1:
@@ -238,15 +237,13 @@ with tab1:
         with c3:
             position = st.selectbox("직급", [""] + list(POSITION_MAPPING.keys()))
             auto_rank = POSITION_MAPPING.get(position, "")
-            rank_options = ["", "3급이하", "2급", "1급", "임원", "임원(부사장이상)"]
-            rank_idx = rank_options.index(auto_rank) if auto_rank in rank_options else 0
-            rank = st.selectbox("직급구분", rank_options, index=rank_idx)
+            rank = st.selectbox("직급구분", ["", "3급이하", "2급", "1급", "임원", "임원(부사장이상)"], 
+                                index=["", "3급이하", "2급", "1급", "임원", "임원(부사장이상)"].index(auto_rank) if auto_rank in ["", "3급이하", "2급", "1급", "임원", "임원(부사장이상)"] else 0)
         with c4:
             location = st.text_input("출장지", placeholder="예: 미국 로스앤젤레스, 일본 도쿄")
             auto_reg = get_region_by_location(location)
-            region_options = ["", "갑", "을", "병", "특"]
-            region_idx = region_options.index(auto_reg) if auto_reg in region_options else 0
-            region = st.selectbox("지역구분", region_options, index=region_idx)
+            region = st.selectbox("지역구분", ["", "갑", "을", "병", "특"], 
+                                index=["", "갑", "을", "병", "특"].index(auto_reg) if auto_reg in ["", "갑", "을", "병", "특"] else 0)
 
         st.markdown("##### 💰 경비 항목 입력")
         
@@ -255,7 +252,7 @@ with tab1:
         if flight_night:
             temp_nights = max(0, temp_nights - 1)
         
-        dummy_row = {"지역구분": region if region else auto_reg, "직급구분": rank, "출장일수": temp_days, "숙박일수": temp_nights}
+        dummy_row = {"지역구분": region if region else auto_reg, "직급구분": rank if rank else auto_rank, "출장일수": temp_days, "숙박일수": temp_nights}
         calc_d_init, calc_h_init = calculate_row_expenses(dummy_row, main_rate)
 
         st.markdown("###### ⚙️ 기타 경비 항목 관리")
@@ -268,7 +265,6 @@ with tab1:
                     st.session_state.custom_etc_items.append({"name": new_etc_name.strip(), "amount": 0, "pay": "여행사"})
                     st.rerun()
 
-        # 하나의 통일된 표 구조 구현 (테두리, 폰트, 배경색 통일)
         table_html = """
         <style>
         .custom-expense-table {
@@ -316,7 +312,6 @@ with tab1:
         """
         st.markdown(table_html, unsafe_allow_html=True)
 
-        # 각 항목 입력 위젯 배치 (금액은 타이핑 입력 전용, step=None 처리)
         col_t1, col_t2, col_t3, col_t4, col_t5 = st.columns([1.5, 2.0, 2.0, 2.5, 2.0])
         with col_t1: st.markdown("교통비")
         with col_t2: st.markdown("항공권")
@@ -367,7 +362,6 @@ with tab1:
             total_etc_krw += a_val
             etc_payments.append((a_val, p_val))
 
-        # 총액 합계 행을 하나의 표 내부에 완벽히 통합 렌더링
         total_sum_preview = air_krw + esta_krw + hotel_krw + daily_krw + total_etc_krw
         
         closing_table_html = f"""
@@ -384,11 +378,12 @@ with tab1:
 
         if submitted:
             final_region = region if region else auto_reg
+            final_rank = rank if rank else auto_rank
             if not name.strip():
                 st.error("성명을 입력해주세요.")
             elif not final_region:
                 st.error("지역구분을 선택해주세요.")
-            elif not rank:
+            elif not final_rank:
                 st.error("직급을 선택해주세요.")
             else:
                 days = (date_end - date_start).days + 1
@@ -405,7 +400,7 @@ with tab1:
                         "출장지": location.strip(),
                         "지역구분": final_region,
                         "직급": position,
-                        "직급구분": rank,
+                        "직급구분": final_rank,
                         "출발일": date_start.strftime("%Y-%m-%d"),
                         "도착일": date_end.strftime("%Y-%m-%d"),
                         "숙박일수": nights,

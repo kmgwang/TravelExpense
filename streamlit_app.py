@@ -1,8 +1,21 @@
 import datetime
 import io
+import matplotlib
+import matplotlib.pyplot as plt
 import pandas as pd
 from st_aggrid import AgGrid, GridOptionsBuilder, GridUpdateMode
 import streamlit as st
+
+# 한글 폰트 설정 (Matplotlib 테이블 이미지 렌더링용)
+import platform
+
+if platform.system() == "Windows":
+    matplotlib.rc("font", family="Malgun Gothic")
+elif platform.system() == "Darwin":
+    matplotlib.rc("font", family="AppleGothic")
+else:
+    matplotlib.rcParams["font.family"] = "NanumGothic"
+matplotlib.rcParams["axes.unicode_minus"] = False
 
 # 페이지 설정 (반드시 최상단 위치)
 try:
@@ -17,7 +30,6 @@ except Exception:
 st.markdown(
     """
     <style>
-    /* Streamlit 메인 컨테이너 최대 너비 확장 (좌우 여백 축소 및 넓은 화면 활용) */
     .block-container {
         max-width: 95% !important;
         padding-top: 2rem;
@@ -43,7 +55,6 @@ st.markdown(
         border-radius: 4px;
         width: 100%;
     }
-    /* 테이블 컨테이너 및 스타일 */
     .table-container {
         display: flex;
         justify-content: center;
@@ -68,11 +79,6 @@ st.markdown(
         background-color: #f2f2f2;
         font-weight: bold;
     }
-    /* 그룹별 색상 정의 */
-    .bg-base { background-color: #e8f4f8; }      /* 기준 정보 계열 (연한 청색) */
-    .bg-calc { background-color: #fff3e0; }      /* 산정 금액 계열 (연한 주황색) */
-    .bg-payment { background-color: #e8f8f5; }   /* 지급액 계열 (연한 녹색) */
-    .bg-total { background-color: #f4ecf7; }     /* 총출장비 계열 (연한 보라색) */
     </style>
 """,
     unsafe_allow_html=True,
@@ -248,7 +254,6 @@ def process_travel_data(data_list):
         d["여행사_지급액"] = agency_total
         d["총출장비"] = employee_total + agency_total
 
-        # 열 순서 재조정 (출장박수가 출장일수보다 왼쪽에 오도록 배치)
         ordered_d = {
             "출장자성명": d.get("출장자성명"),
             "부서": d.get("부서"),
@@ -273,6 +278,65 @@ def process_travel_data(data_list):
 
     df = pd.DataFrame(processed)
     return df
+
+
+def generate_table_image(df):
+    """데이터프레임을 가독성이 높은 이미지로 변환하여 BytesIO 반환"""
+    fig, ax = plt.subplots(figsize=(14, len(df) * 0.8 + 2.5), dpi=300)
+    ax.axis("off")
+    ax.axis("tight")
+
+    # 숫자 데이터 포맷팅 적용
+    formatted_df = df.copy()
+    for col in formatted_df.columns:
+        if (
+            "금액" in col
+            or "합계" in col
+            or "지급액" in col
+            or col in ["출장박수", "출장일수"]
+        ):
+            formatted_df[col] = formatted_df[col].apply(
+                lambda x: f"{int(x):,}" if pd.notnull(x) else "0"
+            )
+
+    table = ax.table(
+        cellText=formatted_df.values,
+        colLabels=formatted_df.columns,
+        cellLoc="center",
+        loc="center",
+    )
+    table.auto_set_font_size(False)
+    table.set_fontsize(11)
+    table.scale(1.2, 1.8)
+
+    # 테이블 디자인 스타일링 적용
+    for key, cell in table.get_celld().items():
+        cell.set_edgecolor("#d0d0d0")
+        if key[0] == 0:
+            cell.set_facecolor("#2c3e50")
+            cell.set_text_props(
+                weight="bold", color="#ffffff", fontsize=11
+            )
+        else:
+            if key[0] % 2 == 0:
+                cell.set_facecolor("#f8f9fa")
+            else:
+                cell.set_facecolor("#ffffff")
+            cell.set_text_props(color="#333333", fontsize=10)
+
+    plt.title(
+        "화천기공 자금팀 송금 요청 분리 집계표",
+        fontsize=16,
+        weight="bold",
+        pad=20,
+    )
+    plt.tight_layout()
+
+    buf = io.BytesIO()
+    plt.savefig(buf, format="png", bbox_inches="tight")
+    plt.close(fig)
+    buf.seek(0)
+    return buf
 
 
 tab1, tab2, tab3 = st.tabs(
@@ -907,7 +971,6 @@ with tab1:
     if len(st.session_state.travel_list) > 0:
         raw_df = process_travel_data(st.session_state.travel_list)
 
-        # 1. "지역구분", "직급구분" 컬럼 삭제 및 불필요한 리스트 컬럼 제거 후 복사
         display_df = raw_df.drop(
             columns=[
                 "교통비항목리스트",
@@ -918,7 +981,6 @@ with tab1:
             ]
         ).copy()
 
-        # 2. 숫자 항목 천단위 콤마(,) 포맷팅 적용
         if "환율" in display_df.columns:
             display_df["환율"] = display_df["환율"].apply(
                 lambda x: f"{float(x):,.2f}"
@@ -944,7 +1006,6 @@ with tab1:
                 lambda x: f"{int(x):,}"
             )
 
-        # 3. 필터 기능 제거 (filterable=False 설정)
         gb = GridOptionsBuilder.from_dataframe(display_df)
         gb.configure_selection(
             selection_mode="single",
@@ -1075,22 +1136,37 @@ with tab2:
         ]
         st.dataframe(fund_view_df, use_container_width=True)
 
-        output_agency = io.BytesIO()
-        excel_save_df = processed_df.drop(
-            columns=["교통비항목리스트", "출장비항목리스트", "기타항목리스트"]
-        )
-        with pd.ExcelWriter(output_agency, engine="openpyxl") as writer:
-            excel_save_df.to_excel(
-                writer, index=False, sheet_name="자금팀_정산집계표"
-            )
-        output_agency.seek(0)
+        st.markdown("<br>", unsafe_allow_html=True)
+        col_down1, col_down2 = st.columns(2)
 
-        st.download_button(
-            label="📥 자금팀 제출용 정산 집계표 엑셀 다운로드",
-            data=output_agency,
-            file_name="화천기공_자금팀_출장정산집계표.xlsx",
-            mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-        )
+        with col_down1:
+            output_agency = io.BytesIO()
+            excel_save_df = processed_df.drop(
+                columns=["교통비항목리스트", "출장비항목리스트", "기타항목리스트"]
+            )
+            with pd.ExcelWriter(output_agency, engine="openpyxl") as writer:
+                excel_save_df.to_excel(
+                    writer, index=False, sheet_name="자금팀_정산집계표"
+                )
+            output_agency.seek(0)
+
+            st.download_button(
+                label="📥 자금팀 정산 집계표 엑셀 다운로드",
+                data=output_agency,
+                file_name="화천기공_자금팀_출장정산집계표.xlsx",
+                mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                use_container_width=True,
+            )
+
+        with col_down2:
+            img_buf = generate_table_image(fund_view_df)
+            st.download_button(
+                label="🖼️ 자금팀 정산 집계표 이미지 다운로드 (PNG)",
+                data=img_buf,
+                file_name="화천기공_자금팀_출장정산집계표.png",
+                mime="image/png",
+                use_container_width=True,
+            )
     else:
         st.warning(
             "⚠️ 입력된 출장 정보가 없습니다. [1. 출장 정보 입력] 탭에서 데이터를 먼저 입력해 주세요."
@@ -1150,7 +1226,7 @@ with tab3:
         output_person.seek(0)
 
         st.download_button(
-            label=f"📥 [{selected_person}] 출자자용 산정 내역서 엑셀 다운로드",
+            label=f"📥 [{selected_person}] 출장자용 산정 내역서 엑셀 다운로드",
             data=output_person,
             file_name=f"화천기공_해외출장산정내역서_{selected_person}.xlsx",
             mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",

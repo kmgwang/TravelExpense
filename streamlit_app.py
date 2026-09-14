@@ -296,7 +296,7 @@ with tab1:
         "기타",
     ]
 
-    st.subheader("👤 출장자 정보 및 🌍 출장지 일정 설정")
+    st.subheader("🌍 출장 정보 등록")
     col_a, col_b = st.columns(2)
 
     with col_a:
@@ -434,9 +434,10 @@ with tab1:
             "<div style='text-align: center;'><b>항목</b></div>",
             unsafe_allow_html=True,
         )
+        
     with th3:
         st.markdown(
-            "<div style='text-align: center;'><b>금액 (천원단위 콤마 표시)</b></div>",
+            "<div style='text-align: center;'><b>금액</b></div>",
             unsafe_allow_html=True,
         )
     with th4:

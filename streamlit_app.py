@@ -12,7 +12,7 @@ try:
 except Exception:
     pass
 
-# 입력란 정렬 및 테이블/총계 행 배경 채우기 위한 커스텀 CSS
+# 입력란 정렬 및 테이블 전체 너비 확장 및 셀 간격 조정을 위한 커스텀 CSS
 st.markdown(
     """
     <style>
@@ -34,18 +34,20 @@ st.markdown(
         border-radius: 4px;
         width: 100%;
     }
-    /* 커스텀 테이블 스타일 (그룹별 색상 구분) */
+    /* 커스텀 테이블 스타일 (가독성 개선 및 셀 너비 확보) */
     .styled-table {
         width: 100%;
         border-collapse: collapse;
         margin-top: 10px;
-        font-size: 0.9em;
+        font-size: 0.95em;
         font-family: sans-serif;
+        table-layout: auto;
     }
     .styled-table th, .styled-table td {
         border: 1px solid #dddddd;
         text-align: center;
-        padding: 8px;
+        padding: 12px 16px; /* 셀 내부 여백을 넓혀 가독성 향상 */
+        white-space: nowrap; /* 내용이 줄바꿈되어 세로로 길어지는 현상 방지 */
     }
     .styled-table th {
         background-color: #f2f2f2;
@@ -61,7 +63,7 @@ st.markdown(
     unsafe_allow_html=True,
 )
 
-st.title("✈️ 화천기공 해외출장비 프로그램")
+st.title("✈️ 화천기공 해외출장비 정산 및 내역서 자동 생성 시스템")
 st.markdown(
     "인사지원팀 해외출장 경비 산정, 자금팀 제출용 정산표 분리, 출장자용 산정 내역서 자동 생성 프로그램입니다."
 )
@@ -71,7 +73,6 @@ st.markdown("---")
 if "travel_list" not in st.session_state:
     st.session_state.travel_list = []
 
-# 경비 입력 폼의 동적 행 관리를 위한 세션 상태 초기화 (교통비, 출장비, 기타별 분리)
 if "transport_rows" not in st.session_state:
     st.session_state.transport_rows = [
         {"item": "항공권", "amount": 0, "payer": "여행사"},
@@ -88,7 +89,6 @@ if "other_rows" not in st.session_state:
     st.session_state.other_rows = [{"item": "", "amount": 0, "payer": "여행사"}]
 
 
-# 1. 직급에 따른 직급 구분 함수
 def get_position_group(position):
     executive_high = ["명예회장", "회장", "사장", "부사장"]
     executive = ["전무", "상무", "이사"]
@@ -107,7 +107,6 @@ def get_position_group(position):
         return "3급이하"
 
 
-# 2. 국가별 지역 구분 매핑 함수
 def get_region_group(country):
     country = country.strip()
     if "일본" in country:
@@ -137,7 +136,6 @@ def get_region_group(country):
         return "갑"
 
 
-# 3. 규정 기준 단가 반환 함수
 def get_standard_rates(region, pos_group):
     rates = {
         "갑": {
@@ -244,7 +242,6 @@ def process_travel_data(data_list):
     return df
 
 
-# 3가지 탭 구성
 tab1, tab2, tab3 = st.tabs(
     [
         "📋 1. 출장 정보 입력",
@@ -414,7 +411,6 @@ with tab1:
             f"📅 최종 산정된 출장 기간: **{calculated_nights}박 {calculated_days}일**"
         )
 
-    # 규정 단가 기반 자동 계산 수행 (천원 단위 절사)
     std_daily, std_hotel = get_standard_rates(region_group, position_group)
     applied_rate = (
         exchange_rate / 100.0 if region_group == "특" else exchange_rate
@@ -430,7 +426,6 @@ with tab1:
             (std_hotel * applied_rate * calculated_nights) // 1000 * 1000
         )
 
-    # 조건 변경 시 자동 계산값을 입력란 상태에 반영 (사용자가 직접 수정한 값은 유지되도록 처리)
     if (
         "prev_auto_calc_hotel" not in st.session_state
         or st.session_state.prev_auto_calc_hotel != auto_calc_hotel
@@ -451,7 +446,6 @@ with tab1:
 
     col_ratios = [1.2, 1.5, 2, 1.5]
 
-    # 헤더
     th1, th2, th3, th4 = st.columns(col_ratios)
     with th1:
         st.markdown(
@@ -477,7 +471,7 @@ with tab1:
     st.markdown("---")
     payer_options = ["여행사", "출장자", "직접입력"]
 
-    # --- 1. 교통비 섹션 ---
+    # --- 교통비 섹션 ---
     updated_transport_rows = []
     transport_sum = 0
     for idx, row_data in enumerate(st.session_state.transport_rows):
@@ -538,7 +532,6 @@ with tab1:
 
     st.session_state.transport_rows = updated_transport_rows
 
-    # 교통비 총계 행
     sc1, sc2, sc3, sc4 = st.columns(col_ratios)
     with sc1:
         st.markdown("")
@@ -557,7 +550,7 @@ with tab1:
 
     st.markdown("---")
 
-    # --- 2. 출장비 섹션 (숙박비, 일당 자동계산 및 수동 수정 가능) ---
+    # --- 출장비 섹션 ---
     updated_travel_exp_rows = []
     travel_exp_sum = 0
     for idx, row_data in enumerate(st.session_state.travel_exp_rows):
@@ -616,7 +609,6 @@ with tab1:
 
     st.session_state.travel_exp_rows = updated_travel_exp_rows
 
-    # 출장비 총계 행
     tc1, tc2, tc3, tc4 = st.columns(col_ratios)
     with tc1:
         st.markdown("")
@@ -635,7 +627,7 @@ with tab1:
 
     st.markdown("---")
 
-    # --- 3. 기타 섹션 (동적 행 관리) ---
+    # --- 기타 섹션 ---
     updated_other_rows = []
     other_sum = 0
     for idx, row_data in enumerate(st.session_state.other_rows):
@@ -697,7 +689,6 @@ with tab1:
 
     st.session_state.other_rows = updated_other_rows
 
-    # 기타 마지막 행 아래에 행 추가/삭제 버튼 배치
     b_c1, b_c2, b_c3 = st.columns([1.2, 2.5, 2.5])
     with b_c1:
         st.markdown("")
@@ -715,7 +706,6 @@ with tab1:
         else:
             st.markdown("")
 
-    # 기타 총계 행
     oc1, oc2, oc3, oc4 = st.columns(col_ratios)
     with oc1:
         st.markdown("")
@@ -734,7 +724,6 @@ with tab1:
 
     st.markdown("---")
 
-    # --- 4. 총액 행 ---
     grand_total = transport_sum + travel_exp_sum + other_sum
     tot_c1, tot_c2, tot_c3, tot_c4 = st.columns(col_ratios)
     with tot_c1:
@@ -794,7 +783,7 @@ with tab1:
     if len(st.session_state.travel_list) > 0:
         raw_df = process_travel_data(st.session_state.travel_list)
 
-        # HTML 기반 커스텀 테이블 렌더링 (기준정보 / 산정금액 / 지급액 / 총출장비 색상 구분 및 천단위 콤마)
+        # HTML 기반 커스텀 테이블 렌더링 (셀 여백 확대 및 '직원_계좌입금액' 콤마 포맷 포함)
         table_html = "<table class='styled-table'><thead><tr>"
         headers = list(raw_df.columns)
         for h in headers:
@@ -805,7 +794,7 @@ with tab1:
             table_html += "<tr>"
             for col in headers:
                 val = row[col]
-                # 컬럼별 셀 색상 클래스 및 포맷팅 적용
+                # 컬럼별 셀 색상 및 천 단위 콤마 포맷팅 적용 (직원_계좌입금액 포함)
                 if "기준" in col:
                     cell_class = "bg-base"
                     if isinstance(val, (int, float)):
@@ -818,7 +807,7 @@ with tab1:
                         val_str = f"{val:,.0f} 원"
                     else:
                         val_str = str(val)
-                elif "지급액" in col:
+                elif "지급액" in col or "직원_계좌입금액" in col:
                     cell_class = "bg-payment"
                     if isinstance(val, (int, float)):
                         val_str = f"{val:,.0f} 원"
@@ -832,7 +821,10 @@ with tab1:
                         val_str = str(val)
                 else:
                     cell_class = ""
-                    if isinstance(val, (int, float)) and col in ["환율", "출장일수", "출장박수"]:
+                    if (
+                        isinstance(val, (int, float))
+                        and col in ["환율", "출장일수", "출장박수"]
+                    ):
                         val_str = f"{val:,.2f}" if col == "환율" else f"{val}"
                     else:
                         val_str = str(val)

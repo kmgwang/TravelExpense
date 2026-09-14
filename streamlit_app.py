@@ -12,7 +12,7 @@ try:
 except Exception:
     pass
 
-# 입력란 정렬 및 테이블 전체 너비 확장 및 셀 간격 조정을 위한 커스텀 CSS
+# 입력란 정렬 및 테이블 중앙 정렬, 셀 너비 확장 커스텀 CSS
 st.markdown(
     """
     <style>
@@ -34,11 +34,17 @@ st.markdown(
         border-radius: 4px;
         width: 100%;
     }
-    /* 커스텀 테이블 스타일 (가독성 개선 및 셀 너비 확보) */
+    /* 테이블 중앙 정렬 및 가독성 개선 스타일 */
+    .table-container {
+        display: flex;
+        justify-content: center;
+        width: 100%;
+        overflow-x: auto;
+    }
     .styled-table {
         width: 100%;
         border-collapse: collapse;
-        margin-top: 10px;
+        margin: 10px auto;
         font-size: 0.95em;
         font-family: sans-serif;
         table-layout: auto;
@@ -46,8 +52,8 @@ st.markdown(
     .styled-table th, .styled-table td {
         border: 1px solid #dddddd;
         text-align: center;
-        padding: 12px 16px; /* 셀 내부 여백을 넓혀 가독성 향상 */
-        white-space: nowrap; /* 내용이 줄바꿈되어 세로로 길어지는 현상 방지 */
+        padding: 12px 16px;
+        white-space: nowrap;
     }
     .styled-table th {
         background-color: #f2f2f2;
@@ -69,7 +75,6 @@ st.markdown(
 )
 st.markdown("---")
 
-# 세션 스테이트 초기화 (기본 데이터 구성)
 if "travel_list" not in st.session_state:
     st.session_state.travel_list = []
 
@@ -231,7 +236,6 @@ def process_travel_data(data_list):
         d["여행사_지급액"] = agency_total
         d["총출장비"] = employee_total + agency_total
 
-        # 불필요한 리스트 항목 제거
         d.pop("교통비항목리스트", None)
         d.pop("출장비항목리스트", None)
         d.pop("기타항목리스트", None)
@@ -471,7 +475,6 @@ with tab1:
     st.markdown("---")
     payer_options = ["여행사", "출장자", "직접입력"]
 
-    # --- 교통비 섹션 ---
     updated_transport_rows = []
     transport_sum = 0
     for idx, row_data in enumerate(st.session_state.transport_rows):
@@ -550,7 +553,6 @@ with tab1:
 
     st.markdown("---")
 
-    # --- 출장비 섹션 ---
     updated_travel_exp_rows = []
     travel_exp_sum = 0
     for idx, row_data in enumerate(st.session_state.travel_exp_rows):
@@ -627,7 +629,6 @@ with tab1:
 
     st.markdown("---")
 
-    # --- 기타 섹션 ---
     updated_other_rows = []
     other_sum = 0
     for idx, row_data in enumerate(st.session_state.other_rows):
@@ -783,8 +784,8 @@ with tab1:
     if len(st.session_state.travel_list) > 0:
         raw_df = process_travel_data(st.session_state.travel_list)
 
-        # HTML 기반 커스텀 테이블 렌더링 (셀 여백 확대 및 '직원_계좌입금액' 콤마 포맷 포함)
-        table_html = "<table class='styled-table'><thead><tr>"
+        # 테이블 컨테이너로 감싸 중앙 정렬 및 셀 포맷 적용
+        table_html = "<div class='table-container'><table class='styled-table'><thead><tr>"
         headers = list(raw_df.columns)
         for h in headers:
             table_html += f"<th>{h}</th>"
@@ -794,44 +795,28 @@ with tab1:
             table_html += "<tr>"
             for col in headers:
                 val = row[col]
-                # 컬럼별 셀 색상 및 천 단위 콤마 포맷팅 적용 (직원_계좌입금액 포함)
                 if "기준" in col:
                     cell_class = "bg-base"
-                    if isinstance(val, (int, float)):
-                        val_str = f"{val:,.0f}"
-                    else:
-                        val_str = str(val)
+                    val_str = f"{val:,.0f}" if isinstance(val, (int, float)) else str(val)
                 elif "산정" in col:
                     cell_class = "bg-calc"
-                    if isinstance(val, (int, float)):
-                        val_str = f"{val:,.0f} 원"
-                    else:
-                        val_str = str(val)
+                    val_str = f"{val:,.0f} 원" if isinstance(val, (int, float)) else str(val)
                 elif "지급액" in col or "직원_계좌입금액" in col:
                     cell_class = "bg-payment"
-                    if isinstance(val, (int, float)):
-                        val_str = f"{val:,.0f} 원"
-                    else:
-                        val_str = str(val)
+                    val_str = f"{val:,.0f} 원" if isinstance(val, (int, float)) else str(val)
                 elif "총출장비" in col:
                     cell_class = "bg-total"
-                    if isinstance(val, (int, float)):
-                        val_str = f"{val:,.0f} 원"
-                    else:
-                        val_str = str(val)
+                    val_str = f"{val:,.0f} 원" if isinstance(val, (int, float)) else str(val)
                 else:
                     cell_class = ""
-                    if (
-                        isinstance(val, (int, float))
-                        and col in ["환율", "출장일수", "출장박수"]
-                    ):
-                        val_str = f"{val:,.2f}" if col == "환율" else f"{val}"
-                    else:
-                        val_str = str(val)
+                    val_str = (
+                        f"{val:,.2f}" if isinstance(val, (int, float)) and col == "환율"
+                        else str(val)
+                    )
 
                 table_html += f"<td class='{cell_class}'>{val_str}</td>"
             table_html += "</tr>"
-        table_html += "</tbody></table>"
+        table_html += "</tbody></table></div>"
 
         st.markdown(table_html, unsafe_allow_html=True)
         st.markdown("<br>", unsafe_allow_html=True)

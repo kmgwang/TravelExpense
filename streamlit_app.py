@@ -5,8 +5,6 @@ import matplotlib.pyplot as plt
 import pandas as pd
 from st_aggrid import AgGrid, GridOptionsBuilder, GridUpdateMode
 import streamlit as st
-
-# 한글 폰트 설정 (Matplotlib 테이블 이미지 렌더링용)
 import platform
 
 if platform.system() == "Windows":
@@ -17,7 +15,6 @@ else:
     matplotlib.rcParams["font.family"] = "NanumGothic"
 matplotlib.rcParams["axes.unicode_minus"] = False
 
-# 페이지 설정 (반드시 최상단 위치)
 try:
     st.set_page_config(
         page_title="화천기공 해외출장비 정산 자동화 프로그램",
@@ -26,7 +23,6 @@ try:
 except Exception:
     pass
 
-# 스트림릿 전체 레이아웃 너비 확장 및 테이블 중앙 정렬 커스텀 CSS
 st.markdown(
     """
     <style>
@@ -281,12 +277,10 @@ def process_travel_data(data_list):
 
 
 def generate_table_image(df):
-    """데이터프레임을 가독성이 높은 이미지로 변환하여 BytesIO 반환"""
     fig, ax = plt.subplots(figsize=(14, len(df) * 0.8 + 2.5), dpi=300)
     ax.axis("off")
     ax.axis("tight")
 
-    # 숫자 데이터 포맷팅 적용
     formatted_df = df.copy()
     for col in formatted_df.columns:
         if (
@@ -309,20 +303,21 @@ def generate_table_image(df):
     table.set_fontsize(11)
     table.scale(1.2, 1.8)
 
-    # 테이블 디자인 스타일링 적용
     for key, cell in table.get_celld().items():
         cell.set_edgecolor("#d0d0d0")
         if key[0] == 0:
             cell.set_facecolor("#2c3e50")
             cell.set_text_props(
-                weight="bold", color="#ffffff", fontsize=11
+                weight="bold", color="#ffffff", fontsize=11, fontfamily="sans-serif"
             )
         else:
             if key[0] % 2 == 0:
                 cell.set_facecolor("#f8f9fa")
             else:
                 cell.set_facecolor("#ffffff")
-            cell.set_text_props(color="#333333", fontsize=10)
+            cell.set_text_props(
+                color="#333333", fontsize=10, fontfamily="sans-serif"
+            )
 
     plt.title(
         "화천기공 자금팀 송금 요청 분리 집계표",
@@ -347,9 +342,6 @@ tab1, tab2, tab3 = st.tabs(
     ]
 )
 
-# ----------------------------------------------------
-# [Tab 1] 출장 정보 입력
-# ----------------------------------------------------
 with tab1:
     st.header("📋 해외출장비 산정")
     if st.session_state.edit_target_index is not None:
@@ -1075,9 +1067,6 @@ with tab1:
     else:
         st.info("등록된 출장 내역이 없습니다.")
 
-# ----------------------------------------------------
-# [Tab 2] 자금팀 연결 자료 생성
-# ----------------------------------------------------
 with tab2:
     st.header("💰 자금팀 제출용 정산 집계표 생성")
     st.markdown(
@@ -1148,6 +1137,15 @@ with tab2:
                 excel_save_df.to_excel(
                     writer, index=False, sheet_name="자금팀_정산집계표"
                 )
+                
+                # K열(직원_계좌입금액), L열(여행사_지급액) 천단위 콤마 서식 적용
+                worksheet = writer.sheets["자금팀_정산집계표"]
+                for row_idx in range(2, len(excel_save_df) + 2):
+                    cell_k = worksheet.cell(row=row_idx, column=11)
+                    cell_l = worksheet.cell(row=row_idx, column=12)
+                    cell_k.number_format = '#,##0'
+                    cell_l.number_format = '#,##0'
+                    
             output_agency.seek(0)
 
             st.download_button(
@@ -1172,9 +1170,6 @@ with tab2:
             "⚠️ 입력된 출장 정보가 없습니다. [1. 출장 정보 입력] 탭에서 데이터를 먼저 입력해 주세요."
         )
 
-# ----------------------------------------------------
-# [Tab 3] 출장비 산정 내역서 생성
-# ----------------------------------------------------
 with tab3:
     st.header("📄 출장자용 해외출장비 산정 내역서 생성")
     st.markdown(

@@ -77,7 +77,7 @@ st.markdown(
     unsafe_allow_html=True,
 )
 
-st.title("✈️ 화천기공 해외출장비 정산 및 내역서 자동 생성 시스템")
+st.title("✈️ 화천기공 해외출장비 프로그램")
 st.markdown(
     "인사지원팀 해외출장 경비 산정, 자금팀 제출용 정산표 분리, 출장자용 산정 내역서 자동 생성 프로그램입니다."
 )
@@ -206,11 +206,9 @@ def process_travel_data(data_list):
             calc_hotel = std_hotel * applied_rate * d.get("출장박수", 0)
             calc_hotel = int(calc_hotel // 1000 * 1000)
 
-        # 항목별 지급처에 따른 실제 집계 반영
         agency_total = 0
         employee_total = 0
 
-        # 일당 및 숙박비 항목(출장비 항목 리스트)의 실제 금액을 산정된 원화값으로 매핑
         for te in d.get("출장비항목리스트", []):
             item_name = te.get("item", "")
             payer = te.get("payer", "출장자")
@@ -246,10 +244,9 @@ def process_travel_data(data_list):
         d["여행사_지급액"] = agency_total
         d["총출장비"] = employee_total + agency_total
 
-        # 임시 보관용 항목 리스트 제거 후 반환용 딕셔너리 구성
-        t_list = d.pop("교통비항목리스트", [])
-        te_list = d.pop("출장비항목리스트", [])
-        o_list = d.pop("기타항목리스트", [])
+        d.pop("교통비항목리스트", [])
+        d.pop("출장비항목리스트", [])
+        d.pop("기타항목리스트", [])
 
         processed.append(d)
 
@@ -736,7 +733,6 @@ with tab1:
 
     st.markdown("---")
 
-    # 실시간 지급처별 합산 금액 계산 (제출 전 화면 표시용)
     real_employee_total = 0
     real_agency_total = 0
 
@@ -817,7 +813,6 @@ with tab1:
     if len(st.session_state.travel_list) > 0:
         raw_df = process_travel_data(st.session_state.travel_list)
 
-        # 테이블 컨테이너로 감싸 중앙 정렬 및 셀 포맷 적용
         table_html = "<div class='table-container'><table class='styled-table'><thead><tr>"
         headers = list(raw_df.columns)
         for h in headers:

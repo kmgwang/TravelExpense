@@ -191,9 +191,6 @@ def process_travel_data(data_list):
         region = d["지역구분"]
         std_daily, std_hotel = get_standard_rates(region, pos_group)
 
-        d["기준일당_외화"] = std_daily
-        d["기준숙박_외화"] = std_hotel
-
         raw_rate = d["환율"]
         if region == "특":
             applied_rate = raw_rate / 100.0
@@ -202,29 +199,36 @@ def process_travel_data(data_list):
 
         calc_daily = std_daily * applied_rate * d.get("출장일수", 1)
         calc_daily = int(calc_daily // 1000 * 1000)
-        d["산정일당_원화"] = calc_daily
 
         if std_hotel == "실비":
             calc_hotel = 0
         else:
             calc_hotel = std_hotel * applied_rate * d.get("출장박수", 0)
             calc_hotel = int(calc_hotel // 1000 * 1000)
-        d["산정숙박_원화"] = calc_hotel
 
+        # 항목별 지급처에 따른 실제 집계 반영
         agency_total = 0
         employee_total = 0
 
-        for t in d.get("교통비항목리스트", []):
-            amt = t.get("amount", 0)
-            payer = t.get("payer", "여행사")
+        # 일당 및 숙박비 항목(출장비 항목 리스트)의 실제 금액을 산정된 원화값으로 매핑
+        for te in d.get("출장비항목리스트", []):
+            item_name = te.get("item", "")
+            payer = te.get("payer", "출장자")
+            if "일당" in item_name:
+                amt = calc_daily
+            elif "숙박" in item_name:
+                amt = calc_hotel
+            else:
+                amt = te.get("amount", 0)
+
             if payer == "여행사":
                 agency_total += amt
             else:
                 employee_total += amt
 
-        for te in d.get("출장비항목리스트", []):
-            amt = te.get("amount", 0)
-            payer = te.get("payer", "출장자")
+        for t in d.get("교통비항목리스트", []):
+            amt = t.get("amount", 0)
+            payer = t.get("payer", "여행사")
             if payer == "여행사":
                 agency_total += amt
             else:
@@ -238,15 +242,14 @@ def process_travel_data(data_list):
             else:
                 employee_total += o_amt
 
-        employee_total += calc_daily + calc_hotel
-
         d["직원_계좌입금액"] = employee_total
         d["여행사_지급액"] = agency_total
         d["총출장비"] = employee_total + agency_total
 
-        d.pop("교통비항목리스트", None)
-        d.pop("출장비항목리스트", None)
-        d.pop("기타항목리스트", None)
+        # 임시 보관용 항목 리스트 제거 후 반환용 딕셔너리 구성
+        t_list = d.pop("교통비항목리스트", [])
+        te_list = d.pop("출장비항목리스트", [])
+        o_list = d.pop("기타항목리스트", [])
 
         processed.append(d)
 
@@ -733,13 +736,39 @@ with tab1:
 
     st.markdown("---")
 
-    grand_total = transport_sum + travel_exp_sum + other_sum
+    # 실시간 지급처별 합산 금액 계산 (제출 전 화면 표시용)
+    real_employee_total = 0
+    real_agency_total = 0
+
+    for te_item in st.session_state.travel_exp_rows:
+        amt = te_item.get("amount", 0)
+        if te_item.get("payer") == "여행사":
+            real_agency_total += amt
+        else:
+            real_employee_total += amt
+
+    for t_item in st.session_state.transport_rows:
+        amt = t_item.get("amount", 0)
+        if t_item.get("payer") == "여행사":
+            real_agency_total += amt
+        else:
+            real_employee_total += amt
+
+    for o_item in st.session_state.other_rows:
+        amt = o_item.get("amount", 0)
+        if o_item.get("payer") == "여행사":
+            real_agency_total += amt
+        else:
+            real_employee_total += amt
+
+    grand_total = real_employee_total + real_agency_total
+
     tot_c1, tot_c2, tot_c3, tot_c4 = st.columns(col_ratios)
     with tot_c1:
         st.markdown("")
     with tot_c2:
         st.markdown(
-            "<div class='row-highlight-blue' style='text-align: right;'><span style='font-size: 1.1em;'><b>총액</b></span></div>",
+            "<div class='row-highlight-blue' style='text-align: right;'><span style='font-size: 1.1em;'><b>총액 (직원지급 + 여행사지급)</b></span></div>",
             unsafe_allow_html=True,
         )
     with tot_c3:
@@ -771,12 +800,8 @@ with tab1:
                 "출장일수": calculated_days,
                 "출장박수": calculated_nights,
                 "환율": exchange_rate,
-                "기준일당_외화": std_daily,
-                "기준숙박_외화": std_hotel,
-                "산정일당_원화": auto_calc_daily,
-                "산정숙박_원화": auto_calc_hotel,
-                "직원_계좌입금액": travel_exp_sum + auto_calc_daily + auto_calc_hotel,
-                "여행사_지급액": transport_sum + other_sum,
+                "직원_계좌입금액": real_employee_total,
+                "여행사_지급액": real_agency_total,
                 "총출장비": grand_total,
                 "교통비항목리스트": st.session_state.transport_rows.copy(),
                 "출장비항목리스트": st.session_state.travel_exp_rows.copy(),
@@ -803,13 +828,7 @@ with tab1:
             table_html += "<tr>"
             for col in headers:
                 val = row[col]
-                if "기준" in col:
-                    cell_class = "bg-base"
-                    val_str = f"{val:,.0f}" if isinstance(val, (int, float)) else str(val)
-                elif "산정" in col:
-                    cell_class = "bg-calc"
-                    val_str = f"{val:,.0f} 원" if isinstance(val, (int, float)) else str(val)
-                elif "지급액" in col or "직원_계좌입금액" in col:
+                if "지급액" in col or "직원_계좌입금액" in col:
                     cell_class = "bg-payment"
                     val_str = f"{val:,.0f} 원" if isinstance(val, (int, float)) else str(val)
                 elif "총출장비" in col:
@@ -955,41 +974,6 @@ with tab3:
             - **직원 계좌 입금 총액**: {person_data.get('직원_계좌입금액', 0):,.0f} 원
             """
             )
-
-        hotel_display = f"{person_data.get('산정숙박_원화', 0):,.0f} 원"
-        currency_unit = (
-            "엔(¥)" if person_data.get("지역구분") == "특" else "달러($)"
-        )
-
-        detail_table = pd.DataFrame(
-            {
-                "경비 항목": [
-                    f"일비 ({person_data.get('출장일수', 0)}일)",
-                    f"숙박비 ({person_data.get('출장박수', 0)}박)",
-                    "대행 및 기타 경비",
-                ],
-                "규정 기준단가": [
-                    f"{person_data.get('기준일당_외화', 0):,d} {currency_unit}/일",
-                    (
-                        f"{person_data.get('기준숙박_외화', 0):,d} {currency_unit}/박"
-                        if person_data.get("기준숙박_외화") != "실비"
-                        else "실비"
-                    ),
-                    "실비 청구",
-                ],
-                "산정 금액 (원화)": [
-                    f"{person_data.get('산정일당_원화', 0):,.0f} 원",
-                    hotel_display,
-                    f"{person_data.get('여행사_지급액', 0):,.0f} 원",
-                ],
-                "지급처 및 비고": [
-                    "지급처 설정 반영",
-                    "지급처 설정 반영",
-                    "지급처 설정 REF",
-                ],
-            }
-        )
-        st.table(detail_table)
 
         output_person = io.BytesIO()
         with pd.ExcelWriter(output_person, engine="openpyxl") as writer:

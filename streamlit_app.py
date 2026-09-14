@@ -12,10 +12,18 @@ try:
 except Exception:
     pass
 
-# 입력란 정렬 및 테이블 중앙 정렬, 셀 너비 확장 커스텀 CSS
+# 스트림릿 전체 레이아웃 너비 확장 및 테이블 중앙 정렬 커스텀 CSS
 st.markdown(
     """
     <style>
+    /* Streamlit 메인 컨테이너 최대 너비 확장 (좌우 여백 축소 및 넓은 화면 활용) */
+    .block-container {
+        max-width: 95% !important;
+        padding-top: 2rem;
+        padding-bottom: 2rem;
+        padding-left: 2rem;
+        padding-right: 2rem;
+    }
     input[aria-label*="항목"] {
         text-align: center !important;
     }
@@ -34,7 +42,7 @@ st.markdown(
         border-radius: 4px;
         width: 100%;
     }
-    /* 테이블 중앙 정렬 및 가독성 개선 스타일 */
+    /* 테이블 컨테이너 및 스타일 */
     .table-container {
         display: flex;
         justify-content: center;

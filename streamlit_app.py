@@ -212,7 +212,11 @@ def process_travel_data(data_list):
         d["총출장비"] = employee_total + agency_total
         processed.append(d)
 
-    return pd.DataFrame(processed)
+    df = pd.DataFrame(processed)
+    # 첫 번째 열에 순번(1부터 시작) 추가
+    if not df.empty:
+        df.insert(0, "순번", range(1, len(df) + 1))
+    return df
 
 
 # 3가지 탭 구성
@@ -434,7 +438,6 @@ with tab1:
             "<div style='text-align: center;'><b>항목</b></div>",
             unsafe_allow_html=True,
         )
-        
     with th3:
         st.markdown(
             "<div style='text-align: center;'><b>금액</b></div>",
@@ -798,6 +801,7 @@ with tab2:
 
         fund_view_df = processed_df[
             [
+                "순번",
                 "출장자성명",
                 "부서",
                 "직급",
@@ -812,6 +816,7 @@ with tab2:
             ]
         ].copy()
         fund_view_df.columns = [
+            "순번",
             "성명",
             "부서",
             "직급",

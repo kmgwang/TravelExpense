@@ -248,7 +248,7 @@ def process_travel_data(data_list):
         d["여행사_지급액"] = agency_total
         d["총출장비"] = employee_total + agency_total
 
-        # 열 순서 명시적 재조정 (출장박수가 출장일수보다 왼쪽에 오도록 배치)
+        # 열 순서 재조정 (출장박수가 출장일수보다 왼쪽에 오도록 배치)
         ordered_d = {
             "출장자성명": d.get("출장자성명"),
             "부서": d.get("부서"),
@@ -299,7 +299,6 @@ with tab1:
             "🔗 [서울외국환중개 환율 조회 사이트 바로가기](http://www.smbs.biz/ExRate/TodayExRate.jsp)"
         )
 
-    # 수정 모드일 때 기존 데이터 불러오기
     target_edit_data = None
     if st.session_state.edit_target_index is not None and len(
         st.session_state.travel_list
@@ -485,7 +484,6 @@ with tab1:
             f"📅 최종 산정된 출장 기간: **{calculated_nights}박 {calculated_days}일**"
         )
 
-    # 수정 시 세션 상태에 행 데이터 반영 처리
     if target_edit_data and "loaded_edit_idx" not in st.session_state:
         st.session_state.transport_rows = target_edit_data.get(
             "교통비항목리스트", st.session_state.transport_rows
@@ -908,15 +906,53 @@ with tab1:
 
     if len(st.session_state.travel_list) > 0:
         raw_df = process_travel_data(st.session_state.travel_list)
+
+        # 1. "지역구분", "직급구분" 컬럼 삭제 및 불필요한 리스트 컬럼 제거 후 복사
         display_df = raw_df.drop(
-            columns=["교통비항목리스트", "출장비항목리스트", "기타항목리스트"]
+            columns=[
+                "교통비항목리스트",
+                "출장비항목리스트",
+                "기타항목리스트",
+                "지역구분",
+                "직급구분",
+            ]
         ).copy()
 
+        # 2. 숫자 항목 천단위 콤마(,) 포맷팅 적용
+        if "환율" in display_df.columns:
+            display_df["환율"] = display_df["환율"].apply(
+                lambda x: f"{float(x):,.2f}"
+            )
+        if "출장박수" in display_df.columns:
+            display_df["출장박수"] = display_df["출장박수"].apply(
+                lambda x: f"{int(x):,}"
+            )
+        if "출장일수" in display_df.columns:
+            display_df["출장일수"] = display_df["출장일수"].apply(
+                lambda x: f"{int(x):,}"
+            )
+        if "직원_계좌입금액" in display_df.columns:
+            display_df["직원_계좌입금액"] = display_df[
+                "직원_계좌입금액"
+            ].apply(lambda x: f"{int(x):,}")
+        if "여행사_지급액" in display_df.columns:
+            display_df["여행사_지급액"] = display_df["여행사_지급액"].apply(
+                lambda x: f"{int(x):,}"
+            )
+        if "총출장비" in display_df.columns:
+            display_df["총출장비"] = display_df["총출장비"].apply(
+                lambda x: f"{int(x):,}"
+            )
+
+        # 3. 필터 기능 제거 (filterable=False 설정)
         gb = GridOptionsBuilder.from_dataframe(display_df)
         gb.configure_selection(
             selection_mode="single",
             use_checkbox=False,
             rowMultiSelectWithClick=False,
+        )
+        gb.configure_default_column(
+            filterable=False, sortable=True, resizable=True
         )
         gb.configure_grid_options(
             rowSelection="single", suppressRowClickSelection=False
@@ -934,12 +970,10 @@ with tab1:
 
         selected_rows = grid_response.get("selected_rows", None)
 
-        # 만약 더블클릭 등을 감지하거나 행이 선택되어 수정 모드로 진입할 수 있도록 처리
         if selected_rows is not None:
             if isinstance(selected_rows, pd.DataFrame) and not selected_rows.empty:
                 selected_idx = selected_rows.index[0]
             elif isinstance(selected_rows, list) and len(selected_rows) > 0:
-                # 선택된 행의 인덱스 찾기
                 sel_row_dict = selected_rows[0]
                 matched = display_df[
                     (display_df["출장자성명"] == sel_row_dict.get("출장자성명"))

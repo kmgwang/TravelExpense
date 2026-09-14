@@ -12,7 +12,7 @@ try:
 except Exception:
     pass
 
-# 입력란 정렬 및 총계/총액 행 배경 전체 채우기 위한 커스텀 CSS
+# 입력란 정렬 및 테이블/총계 행 배경 채우기 위한 커스텀 CSS
 st.markdown(
     """
     <style>
@@ -34,6 +34,28 @@ st.markdown(
         border-radius: 4px;
         width: 100%;
     }
+    /* 커스텀 테이블 스타일 (그룹별 색상 구분) */
+    .styled-table {
+        width: 100%;
+        border-collapse: collapse;
+        margin-top: 10px;
+        font-size: 0.9em;
+        font-family: sans-serif;
+    }
+    .styled-table th, .styled-table td {
+        border: 1px solid #dddddd;
+        text-align: center;
+        padding: 8px;
+    }
+    .styled-table th {
+        background-color: #f2f2f2;
+        font-weight: bold;
+    }
+    /* 그룹별 색상 정의 */
+    .bg-base { background-color: #e8f4f8; }      /* 기준 정보 계열 (연한 청색) */
+    .bg-calc { background-color: #fff3e0; }      /* 산정 금액 계열 (연한 주황색) */
+    .bg-payment { background-color: #e8f8f5; }   /* 지급액 계열 (연한 녹색) */
+    .bg-total { background-color: #f4ecf7; }     /* 총출장비 계열 (연한 보라색) */
     </style>
 """,
     unsafe_allow_html=True,
@@ -210,12 +232,15 @@ def process_travel_data(data_list):
         d["직원_계좌입금액"] = employee_total
         d["여행사_지급액"] = agency_total
         d["총출장비"] = employee_total + agency_total
+
+        # 불필요한 리스트 항목 제거
+        d.pop("교통비항목리스트", None)
+        d.pop("출장비항목리스트", None)
+        d.pop("기타항목리스트", None)
+
         processed.append(d)
 
     df = pd.DataFrame(processed)
-    # 첫 번째 열에 순번(1부터 시작) 추가
-    if not df.empty:
-        df.insert(0, "순번", range(1, len(df) + 1))
     return df
 
 
@@ -748,6 +773,13 @@ with tab1:
                 "출장일수": calculated_days,
                 "출장박수": calculated_nights,
                 "환율": exchange_rate,
+                "기준일당_외화": std_daily,
+                "기준숙박_외화": std_hotel,
+                "산정일당_원화": auto_calc_daily,
+                "산정숙박_원화": auto_calc_hotel,
+                "직원_계좌입금액": travel_exp_sum + auto_calc_daily + auto_calc_hotel,
+                "여행사_지급액": transport_sum + other_sum,
+                "총출장비": grand_total,
                 "교통비항목리스트": st.session_state.transport_rows.copy(),
                 "출장비항목리스트": st.session_state.travel_exp_rows.copy(),
                 "기타항목리스트": st.session_state.other_rows.copy(),
@@ -760,8 +792,58 @@ with tab1:
     st.markdown("---")
     st.subheader("📊 현재 등록된 전체 출장 내역 목록")
     if len(st.session_state.travel_list) > 0:
-        current_df = process_travel_data(st.session_state.travel_list)
-        st.dataframe(current_df, use_container_width=True)
+        raw_df = process_travel_data(st.session_state.travel_list)
+
+        # HTML 기반 커스텀 테이블 렌더링 (기준정보 / 산정금액 / 지급액 / 총출장비 색상 구분 및 천단위 콤마)
+        table_html = "<table class='styled-table'><thead><tr>"
+        headers = list(raw_df.columns)
+        for h in headers:
+            table_html += f"<th>{h}</th>"
+        table_html += "</tr></thead><tbody>"
+
+        for _, row in raw_df.iterrows():
+            table_html += "<tr>"
+            for col in headers:
+                val = row[col]
+                # 컬럼별 셀 색상 클래스 및 포맷팅 적용
+                if "기준" in col:
+                    cell_class = "bg-base"
+                    if isinstance(val, (int, float)):
+                        val_str = f"{val:,.0f}"
+                    else:
+                        val_str = str(val)
+                elif "산정" in col:
+                    cell_class = "bg-calc"
+                    if isinstance(val, (int, float)):
+                        val_str = f"{val:,.0f} 원"
+                    else:
+                        val_str = str(val)
+                elif "지급액" in col:
+                    cell_class = "bg-payment"
+                    if isinstance(val, (int, float)):
+                        val_str = f"{val:,.0f} 원"
+                    else:
+                        val_str = str(val)
+                elif "총출장비" in col:
+                    cell_class = "bg-total"
+                    if isinstance(val, (int, float)):
+                        val_str = f"{val:,.0f} 원"
+                    else:
+                        val_str = str(val)
+                else:
+                    cell_class = ""
+                    if isinstance(val, (int, float)) and col in ["환율", "출장일수", "출장박수"]:
+                        val_str = f"{val:,.2f}" if col == "환율" else f"{val}"
+                    else:
+                        val_str = str(val)
+
+                table_html += f"<td class='{cell_class}'>{val_str}</td>"
+            table_html += "</tr>"
+        table_html += "</tbody></table>"
+
+        st.markdown(table_html, unsafe_allow_html=True)
+        st.markdown("<br>", unsafe_allow_html=True)
+
         if st.button("🗑️ 전체 데이터 초기화"):
             st.session_state.travel_list = []
             st.rerun()
@@ -801,7 +883,6 @@ with tab2:
 
         fund_view_df = processed_df[
             [
-                "순번",
                 "출장자성명",
                 "부서",
                 "직급",
@@ -816,7 +897,6 @@ with tab2:
             ]
         ].copy()
         fund_view_df.columns = [
-            "순번",
             "성명",
             "부서",
             "직급",

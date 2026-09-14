@@ -1,6 +1,7 @@
 import datetime
 import io
 import pandas as pd
+from st_aggrid import AgGrid, GridOptionsBuilder, GridUpdateMode
 import streamlit as st
 
 # 페이지 설정 (반드시 최상단 위치)
@@ -85,6 +86,9 @@ st.markdown("---")
 
 if "travel_list" not in st.session_state:
     st.session_state.travel_list = []
+
+if "edit_target_index" not in st.session_state:
+    st.session_state.edit_target_index = None
 
 if "transport_rows" not in st.session_state:
     st.session_state.transport_rows = [
@@ -244,11 +248,28 @@ def process_travel_data(data_list):
         d["여행사_지급액"] = agency_total
         d["총출장비"] = employee_total + agency_total
 
-        d.pop("교통비항목리스트", [])
-        d.pop("출장비항목리스트", [])
-        d.pop("기타항목리스트", [])
+        # 열 순서 명시적 재조정 (출장박수가 출장일수보다 왼쪽에 오도록 배치)
+        ordered_d = {
+            "출장자성명": d.get("출장자성명"),
+            "부서": d.get("부서"),
+            "직급": d.get("직급"),
+            "직급구분": d.get("직급구분"),
+            "출장지": d.get("출장지"),
+            "지역구분": d.get("지역구분"),
+            "출장시작일": d.get("출장시작일"),
+            "출장종료일": d.get("출장종료일"),
+            "출장박수": d.get("출장박수"),
+            "출장일수": d.get("출장일수"),
+            "환율": d.get("환율"),
+            "직원_계좌입금액": d.get("직원_계좌입금액"),
+            "여행사_지급액": d.get("여행사_지급액"),
+            "총출장비": d.get("총출장비"),
+            "교통비항목리스트": d.get("교통비항목리스트"),
+            "출장비항목리스트": d.get("출장비항목리스트"),
+            "기타항목리스트": d.get("기타항목리스트"),
+        }
 
-        processed.append(d)
+        processed.append(ordered_d)
 
     df = pd.DataFrame(processed)
     return df
@@ -267,18 +288,36 @@ tab1, tab2, tab3 = st.tabs(
 # ----------------------------------------------------
 with tab1:
     st.header("📋 해외출장비 산정")
-    st.markdown(
-        "출장자 정보와 출장지, 직급을 입력하면 규정에 따른 일당과 숙박비가 자동 산정되며, 직접 수정도 가능합니다."
-    )
+    if st.session_state.edit_target_index is not None:
+        st.info(
+            f"✏️ 현재 **[인덱스 {st.session_state.edit_target_index}]** 번 출장 내역 수정 중입니다. 수정 후 아래 버튼을 누르면 내용이 갱신됩니다."
+        )
 
     col_rate_info, col_rate_input = st.columns([2, 1])
     with col_rate_info:
         st.markdown(
             "🔗 [서울외국환중개 환율 조회 사이트 바로가기](http://www.smbs.biz/ExRate/TodayExRate.jsp)"
         )
+
+    # 수정 모드일 때 기존 데이터 불러오기
+    target_edit_data = None
+    if st.session_state.edit_target_index is not None and len(
+        st.session_state.travel_list
+    ) > st.session_state.edit_target_index:
+        target_edit_data = st.session_state.travel_list[
+            st.session_state.edit_target_index
+        ]
+
+    default_exchange_rate = (
+        target_edit_data["환율"] if target_edit_data else 1350.0
+    )
     with col_rate_input:
         exchange_rate = st.number_input(
-            "적용 환율 입력", min_value=0.0, value=1350.0, step=1.0, format="%.2f"
+            "적용 환율 입력",
+            min_value=0.0,
+            value=float(default_exchange_rate),
+            step=1.0,
+            format="%.2f",
         )
 
     department_list = [
@@ -338,34 +377,41 @@ with tab1:
     col_a, col_b = st.columns(2)
 
     with col_a:
-        name = st.text_input("출장자 성명")
-        department = st.selectbox(
-            "부서",
-            department_list,
-            index=(
-                department_list.index("인사지원팀")
-                if "인사지원팀" in department_list
-                else 0
-            ),
+        default_name = (
+            target_edit_data["출장자성명"] if target_edit_data else ""
         )
-        position = st.selectbox(
-            "직급",
-            [
-                "사장",
-                "부사장",
-                "전무",
-                "상무",
-                "이사",
-                "부장",
-                "차장",
-                "과장",
-                "대리",
-                "계장",
-                "사원",
-                "1급기능장",
-                "2급기능장",
-            ],
+        name = st.text_input("출장자 성명", value=default_name)
+
+        default_dept = target_edit_data["부서"] if target_edit_data else "인사지원팀"
+        dept_idx = (
+            department_list.index(default_dept)
+            if default_dept in department_list
+            else 0
         )
+        department = st.selectbox("부서", department_list, index=dept_idx)
+
+        position_list = [
+            "사장",
+            "부사장",
+            "전무",
+            "상무",
+            "이사",
+            "부장",
+            "차장",
+            "과장",
+            "대리",
+            "계장",
+            "사원",
+            "1급기능장",
+            "2급기능장",
+        ]
+        default_pos = target_edit_data["직급"] if target_edit_data else "사원"
+        pos_idx = (
+            position_list.index(default_pos)
+            if default_pos in position_list
+            else 10
+        )
+        position = st.selectbox("직급", position_list, index=pos_idx)
 
         auto_pos_group = get_position_group(position)
         pos_group_options = [
@@ -375,9 +421,12 @@ with tab1:
             "2급",
             "3급이하",
         ]
+        default_pos_group = (
+            target_edit_data["직급구분"] if target_edit_data else auto_pos_group
+        )
         default_pos_idx = (
-            pos_group_options.index(auto_pos_group)
-            if auto_pos_group in pos_group_options
+            pos_group_options.index(default_pos_group)
+            if default_pos_group in pos_group_options
             else 4
         )
         position_group = st.selectbox(
@@ -385,18 +434,31 @@ with tab1:
         )
 
     with col_b:
-        default_start = datetime.date.today() + datetime.timedelta(days=1)
-        default_end = default_start + datetime.timedelta(days=7)
+        default_start = (
+            datetime.date.fromisoformat(target_edit_data["출장시작일"])
+            if target_edit_data
+            else datetime.date.today() + datetime.timedelta(days=1)
+        )
+        default_end = (
+            datetime.date.fromisoformat(target_edit_data["출장종료일"])
+            if target_edit_data
+            else default_start + datetime.timedelta(days=7)
+        )
 
         start_date = st.date_input("출장 시작일", value=default_start)
         end_date = st.date_input("출장 종료일", value=default_end)
-        country = st.text_input("출장지")
+
+        default_country = target_edit_data["출장지"] if target_edit_data else ""
+        country = st.text_input("출장지", value=default_country)
 
         auto_region = get_region_group(country) if country else "갑"
         region_options = ["갑", "을", "병", "특"]
+        default_region = (
+            target_edit_data["지역구분"] if target_edit_data else auto_region
+        )
         default_reg_idx = (
-            region_options.index(auto_region)
-            if auto_region in region_options
+            region_options.index(default_region)
+            if default_region in region_options
             else 0
         )
         region_group = st.selectbox(
@@ -423,6 +485,19 @@ with tab1:
             f"📅 최종 산정된 출장 기간: **{calculated_nights}박 {calculated_days}일**"
         )
 
+    # 수정 시 세션 상태에 행 데이터 반영 처리
+    if target_edit_data and "loaded_edit_idx" not in st.session_state:
+        st.session_state.transport_rows = target_edit_data.get(
+            "교통비항목리스트", st.session_state.transport_rows
+        )
+        st.session_state.travel_exp_rows = target_edit_data.get(
+            "출장비항목리스트", st.session_state.travel_exp_rows
+        )
+        st.session_state.other_rows = target_edit_data.get(
+            "기타항목리스트", st.session_state.other_rows
+        )
+        st.session_state.loaded_edit_idx = st.session_state.edit_target_index
+
     std_daily, std_hotel = get_standard_rates(region_group, position_group)
     applied_rate = (
         exchange_rate / 100.0 if region_group == "특" else exchange_rate
@@ -438,19 +513,20 @@ with tab1:
             (std_hotel * applied_rate * calculated_nights) // 1000 * 1000
         )
 
-    if (
-        "prev_auto_calc_hotel" not in st.session_state
-        or st.session_state.prev_auto_calc_hotel != auto_calc_hotel
-    ):
-        st.session_state.prev_auto_calc_hotel = auto_calc_hotel
-        st.session_state["te_amt_str_0"] = f"{auto_calc_hotel:,}"
+    if target_edit_data is None:
+        if (
+            "prev_auto_calc_hotel" not in st.session_state
+            or st.session_state.prev_auto_calc_hotel != auto_calc_hotel
+        ):
+            st.session_state.prev_auto_calc_hotel = auto_calc_hotel
+            st.session_state["te_amt_str_0"] = f"{auto_calc_hotel:,}"
 
-    if (
-        "prev_auto_calc_daily" not in st.session_state
-        or st.session_state.prev_auto_calc_daily != auto_calc_daily
-    ):
-        st.session_state.prev_auto_calc_daily = auto_calc_daily
-        st.session_state["te_amt_str_1"] = f"{auto_calc_daily:,}"
+        if (
+            "prev_auto_calc_daily" not in st.session_state
+            or st.session_state.prev_auto_calc_daily != auto_calc_daily
+        ):
+            st.session_state.prev_auto_calc_daily = auto_calc_daily
+            st.session_state["te_amt_str_1"] = f"{auto_calc_daily:,}"
 
     st.markdown("---")
     st.subheader("💵 금액 입력")
@@ -579,6 +655,8 @@ with tab1:
             )
         with tec3:
             key_prefix = f"te_amt_str_{idx}"
+            if key_prefix not in st.session_state and target_edit_data:
+                st.session_state[key_prefix] = f"{int(row_data['amount']):,}"
 
             def make_on_change_te(k):
                 def callback():
@@ -776,9 +854,12 @@ with tab1:
         st.markdown("")
 
     st.markdown("---")
-    submitted = st.button(
-        "➕ 입력한 출장 내역 규정 적용 및 추가", use_container_width=True
+    btn_label = (
+        "🔄 수정 사항 반영하기"
+        if st.session_state.edit_target_index is not None
+        else "➕ 입력한 출장 내역 규정 적용 및 추가"
     )
+    submitted = st.button(btn_label, use_container_width=True)
 
     if submitted:
         if not name or not country:
@@ -803,49 +884,99 @@ with tab1:
                 "출장비항목리스트": st.session_state.travel_exp_rows.copy(),
                 "기타항목리스트": st.session_state.other_rows.copy(),
             }
-            st.session_state.travel_list.append(new_data)
-            st.success(
-                f"✅ {name} 님의 출장 경비가 규정에 맞춰 산정되었습니다!"
-            )
+
+            if st.session_state.edit_target_index is not None:
+                st.session_state.travel_list[
+                    st.session_state.edit_target_index
+                ] = new_data
+                st.success(
+                    f"✅ [{name}] 님의 출장 내역이 성공적으로 수정(갱신)되었습니다!"
+                )
+                st.session_state.edit_target_index = None
+                if "loaded_edit_idx" in st.session_state:
+                    del st.session_state["loaded_edit_idx"]
+            else:
+                st.session_state.travel_list.append(new_data)
+                st.success(
+                    f"✅ {name} 님의 출장 경비가 규정에 맞춰 산정되었습니다!"
+                )
+            st.rerun()
 
     st.markdown("---")
     st.subheader("📊 현재 등록된 전체 출장 내역 목록")
+    st.caption("💡 팁: 아래 표의 행을 **더블클릭**하면 해당 내역을 다시 수정할 수 있습니다.")
+
     if len(st.session_state.travel_list) > 0:
         raw_df = process_travel_data(st.session_state.travel_list)
+        display_df = raw_df.drop(
+            columns=["교통비항목리스트", "출장비항목리스트", "기타항목리스트"]
+        ).copy()
 
-        table_html = "<div class='table-container'><table class='styled-table'><thead><tr>"
-        headers = list(raw_df.columns)
-        for h in headers:
-            table_html += f"<th>{h}</th>"
-        table_html += "</tr></thead><tbody>"
+        gb = GridOptionsBuilder.from_dataframe(display_df)
+        gb.configure_selection(
+            selection_mode="single",
+            use_checkbox=False,
+            rowMultiSelectWithClick=False,
+        )
+        gb.configure_grid_options(
+            rowSelection="single", suppressRowClickSelection=False
+        )
+        grid_options = gb.build()
 
-        for _, row in raw_df.iterrows():
-            table_html += "<tr>"
-            for col in headers:
-                val = row[col]
-                if "지급액" in col or "직원_계좌입금액" in col:
-                    cell_class = "bg-payment"
-                    val_str = f"{val:,.0f} 원" if isinstance(val, (int, float)) else str(val)
-                elif "총출장비" in col:
-                    cell_class = "bg-total"
-                    val_str = f"{val:,.0f} 원" if isinstance(val, (int, float)) else str(val)
+        grid_response = AgGrid(
+            display_df,
+            gridOptions=grid_options,
+            update_mode=GridUpdateMode.MODEL_CHANGED,
+            fit_columns_on_grid_load=True,
+            height=250,
+            theme="balham",
+        )
+
+        selected_rows = grid_response.get("selected_rows", None)
+
+        # 만약 더블클릭 등을 감지하거나 행이 선택되어 수정 모드로 진입할 수 있도록 처리
+        if selected_rows is not None:
+            if isinstance(selected_rows, pd.DataFrame) and not selected_rows.empty:
+                selected_idx = selected_rows.index[0]
+            elif isinstance(selected_rows, list) and len(selected_rows) > 0:
+                # 선택된 행의 인덱스 찾기
+                sel_row_dict = selected_rows[0]
+                matched = display_df[
+                    (display_df["출장자성명"] == sel_row_dict.get("출장자성명"))
+                    & (display_df["출장지"] == sel_row_dict.get("출장지"))
+                    & (display_df["출장시작일"] == sel_row_dict.get("출장시작일"))
+                ]
+                if not matched.empty:
+                    selected_idx = matched.index[0]
                 else:
-                    cell_class = ""
-                    val_str = (
-                        f"{val:,.2f}" if isinstance(val, (int, float)) and col == "환율"
-                        else str(val)
-                    )
+                    selected_idx = None
+            else:
+                selected_idx = None
 
-                table_html += f"<td class='{cell_class}'>{val_str}</td>"
-            table_html += "</tr>"
-        table_html += "</tbody></table></div>"
+            if selected_idx is not None and st.session_state.edit_target_index is None:
+                st.session_state.edit_target_index = int(selected_idx)
+                st.success(
+                    f"📌 [{display_df.iloc[selected_idx]['출장자성명']}] 님의 내역이 선택되었습니다. 위쪽 입력 폼에서 내용을 수정한 뒤 '수정 사항 반영하기' 버튼을 눌러주세요."
+                )
+                st.rerun()
 
-        st.markdown(table_html, unsafe_allow_html=True)
         st.markdown("<br>", unsafe_allow_html=True)
 
-        if st.button("🗑️ 전체 데이터 초기화"):
-            st.session_state.travel_list = []
-            st.rerun()
+        col_del1, col_del2 = st.columns([1, 1])
+        with col_del1:
+            if st.session_state.edit_target_index is not None:
+                if st.button("❌ 수정 모드 취소"):
+                    st.session_state.edit_target_index = None
+                    if "loaded_edit_idx" in st.session_state:
+                        del st.session_state["loaded_edit_idx"]
+                    st.rerun()
+        with col_del2:
+            if st.button("🗑️ 전체 데이터 초기화"):
+                st.session_state.travel_list = []
+                st.session_state.edit_target_index = None
+                if "loaded_edit_idx" in st.session_state:
+                    del st.session_state["loaded_edit_idx"]
+                st.rerun()
     else:
         st.info("등록된 출장 내역이 없습니다.")
 
@@ -888,8 +1019,8 @@ with tab2:
                 "직급구분",
                 "출장지",
                 "지역구분",
-                "출장일수",
                 "출장박수",
+                "출장일수",
                 "직원_계좌입금액",
                 "여행사_지급액",
                 "총출장비",
@@ -902,8 +1033,8 @@ with tab2:
             "직급구분",
             "출장지",
             "지역구분",
-            "출장일수",
             "출장박수",
+            "출장일수",
             "직원지급액",
             "여행사지급액",
             "총합계",
@@ -911,8 +1042,11 @@ with tab2:
         st.dataframe(fund_view_df, use_container_width=True)
 
         output_agency = io.BytesIO()
+        excel_save_df = processed_df.drop(
+            columns=["교통비항목리스트", "출장비항목리스트", "기타항목리스트"]
+        )
         with pd.ExcelWriter(output_agency, engine="openpyxl") as writer:
-            processed_df.to_excel(
+            excel_save_df.to_excel(
                 writer, index=False, sheet_name="자금팀_정산집계표"
             )
         output_agency.seek(0)
@@ -971,8 +1105,12 @@ with tab3:
             )
 
         output_person = io.BytesIO()
+        export_person_df = pd.DataFrame([person_data]).drop(
+            columns=["교통비항목리스트", "출장비항목리스트", "기타항목리스트"],
+            errors="ignore",
+        )
         with pd.ExcelWriter(output_person, engine="openpyxl") as writer:
-            pd.DataFrame([person_data]).to_excel(
+            export_person_df.to_excel(
                 writer, index=False, sheet_name="산정내역서"
             )
         output_person.seek(0)

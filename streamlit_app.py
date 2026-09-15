@@ -7,6 +7,7 @@ from st_aggrid import AgGrid, GridOptionsBuilder, GridUpdateMode
 import streamlit as st
 import platform
 from openpyxl.styles import Alignment, PatternFill, Font, Border, Side
+from openpyxl.utils import get_column_letter
 
 if platform.system() == "Windows":
     matplotlib.rc("font", family="Malgun Gothic")
@@ -51,30 +52,6 @@ st.markdown(
         padding: 10px 12px;
         border-radius: 4px;
         width: 100%;
-    }
-    .table-container {
-        display: flex;
-        justify-content: center;
-        width: 100%;
-        overflow-x: auto;
-    }
-    .styled-table {
-        width: 100%;
-        border-collapse: collapse;
-        margin: 10px auto;
-        font-size: 0.95em;
-        font-family: sans-serif;
-        table-layout: auto;
-    }
-    .styled-table th, .styled-table td {
-        border: 1px solid #dddddd;
-        text-align: center;
-        padding: 12px 16px;
-        white-space: nowrap;
-    }
-    .styled-table th {
-        background-color: #f2f2f2;
-        font-weight: bold;
     }
     </style>
 """,
@@ -419,7 +396,7 @@ with tab1:
             "2급",
             "3급이하",
         ]
-        
+
         if target_edit_data and "loaded_edit_idx" not in st.session_state:
             default_pos_group = target_edit_data.get("직급구분", auto_pos_group)
         else:
@@ -454,7 +431,7 @@ with tab1:
 
         auto_region = get_region_group(country) if country else "갑"
         region_options = ["갑", "을", "병", "특"]
-        
+
         if target_edit_data and "loaded_edit_idx" not in st.session_state:
             default_region = target_edit_data.get("지역구분", auto_region)
         else:
@@ -583,6 +560,7 @@ with tab1:
             if key_prefix not in st.session_state:
                 st.session_state[key_prefix] = f"{int(row_data['amount']):,}"
 
+
             def make_on_change(k):
                 def callback():
                     val = st.session_state[k]
@@ -592,6 +570,7 @@ with tab1:
                     )
 
                 return callback
+
 
             amt_str = st.text_input(
                 f"교통비 금액 {idx}",
@@ -661,6 +640,7 @@ with tab1:
             if key_prefix not in st.session_state and target_edit_data:
                 st.session_state[key_prefix] = f"{int(row_data['amount']):,}"
 
+
             def make_on_change_te(k):
                 def callback():
                     val = st.session_state[k]
@@ -670,6 +650,7 @@ with tab1:
                     )
 
                 return callback
+
 
             amt_str = st.text_input(
                 f"출장비 금액 {idx}",
@@ -740,6 +721,7 @@ with tab1:
             if key_prefix not in st.session_state:
                 st.session_state[key_prefix] = f"{int(row_data['amount']):,}"
 
+
             def make_on_change_other(k):
                 def callback():
                     val = st.session_state[k]
@@ -749,6 +731,7 @@ with tab1:
                     )
 
                 return callback
+
 
             amt_str = st.text_input(
                 f"기타 금액 {idx}",
@@ -922,7 +905,7 @@ with tab1:
                 "환율",
             ]
         ).reset_index(drop=True).copy()
-        
+
         display_df.insert(0, "순번", range(1, len(display_df) + 1))
 
         if "출장지" in display_df.columns and "순번" in display_df.columns:
@@ -1063,7 +1046,7 @@ with tab2:
                 "총출장비",
             ]
         ].copy()
-        
+
         fund_view_df.insert(0, "순번", range(1, len(fund_view_df) + 1))
 
         if "출장지" in fund_view_df.columns and "순번" in fund_view_df.columns:
@@ -1115,28 +1098,36 @@ with tab2:
             excel_save_df.to_excel(
                 writer, index=False, sheet_name="자금팀_정산집계표"
             )
-            
+
             worksheet = writer.sheets["자금팀_정산집계표"]
-            
-            fill_sky_blue = PatternFill(start_color="D9E1F2", end_color="D9E1F2", fill_type="solid")
-            font_mild = Font(name="맑은 고딕", size=10, bold=False, color="333333")
-            
-            fill_fg_strong = PatternFill(start_color="1F4E78", end_color="1F4E78", fill_type="solid")
-            font_strong = Font(name="맑은 고딕", size=10, bold=True, color="FFFFFF")
-            
-            thick_side = Side(style='medium', color='000000')
-            thin_side = Side(style='thin', color='000000')
-            dashed_side = Side(style='dashed', color='000000')
-            
+
+            fill_sky_blue = PatternFill(
+                start_color="D9E1F2", end_color="D9E1F2", fill_type="solid"
+            )
+            font_mild = Font(
+                name="맑은 고딕", size=10, bold=False, color="333333"
+            )
+
+            fill_fg_strong = PatternFill(
+                start_color="1F4E78", end_color="1F4E78", fill_type="solid"
+            )
+            font_strong = Font(
+                name="맑은 고딕", size=10, bold=True, color="FFFFFF"
+            )
+
+            thick_side = Side(style="medium", color="000000")
+            thin_side = Side(style="thin", color="000000")
+            dashed_side = Side(style="dashed", color="000000")
+
             max_row = len(excel_save_df) + 1
             max_col = len(excel_save_df.columns)
 
             for row_idx in range(1, max_row + 1):
                 worksheet.row_dimensions[row_idx].height = 35.0
-                
+
                 for col_idx in range(1, max_col + 1):
                     cell = worksheet.cell(row=row_idx, column=col_idx)
-                    
+
                     if col_idx in [6, 7]:
                         cell.fill = fill_sky_blue
 
@@ -1145,34 +1136,49 @@ with tab2:
                         bottom_b = thick_side
                     else:
                         top_b = dashed_side
-                        bottom_b = thick_side if row_idx == max_row else dashed_side
+                        bottom_b = (
+                            thick_side if row_idx == max_row else dashed_side
+                        )
 
                     left_b = thick_side if col_idx == 1 else thin_side
                     right_b = thick_side if col_idx == max_col else thin_side
-                    
-                    cell.border = Border(top=top_b, bottom=bottom_b, left=left_b, right=right_b)
-                    
+
+                    cell.border = Border(
+                        top=top_b, bottom=bottom_b, left=left_b, right=right_b
+                    )
+
                     if col_idx <= 5:
-                        cell.alignment = Alignment(horizontal='center', vertical='center')
+                        cell.alignment = Alignment(
+                            horizontal="center", vertical="center"
+                        )
                     else:
                         if row_idx == 1:
-                            cell.alignment = Alignment(horizontal='center', vertical='center')
+                            cell.alignment = Alignment(
+                                horizontal="center", vertical="center"
+                            )
                             if col_idx == 8:
                                 cell.fill = fill_fg_strong
-                                cell.font = Font(name="맑은 고딕", size=11, bold=True, color="FFFFFF")
+                                cell.font = Font(
+                                    name="맑은 고딕",
+                                    size=11,
+                                    bold=True,
+                                    color="FFFFFF",
+                                )
                         else:
-                            cell.alignment = Alignment(horizontal='right', vertical='center')
-                            
+                            cell.alignment = Alignment(
+                                horizontal="right", vertical="center"
+                            )
+
                             if col_idx in [6, 7]:
                                 cell.font = font_mild
                             elif col_idx == 8:
                                 cell.fill = fill_fg_strong
                                 cell.font = font_strong
-                    
+
                     col_name = excel_save_df.columns[col_idx - 1]
                     if any(k in col_name for k in ["금액", "지급액", "총출장비"]):
-                        cell.number_format = '#,##0'
-            
+                        cell.number_format = "#,##0"
+
             for col in worksheet.columns:
                 max_length = 0
                 col_letter = col[0].column_letter
@@ -1182,8 +1188,10 @@ with tab2:
                             max_length = max(max_length, len(str(cell.value)))
                     except:
                         pass
-                worksheet.column_dimensions[col_letter].width = max(max_length + 5, 14)
-                
+                worksheet.column_dimensions[col_letter].width = max(
+                    max_length + 5, 14
+                )
+
         output_agency.seek(0)
 
         st.download_button(
@@ -1237,22 +1245,380 @@ with tab3:
             """
             )
 
-        output_person = io.BytesIO()
-        export_person_df = pd.DataFrame([person_data]).drop(
-            columns=["교통비항목리스트", "출장비항목리스트", "기타항목리스트"],
-            errors="ignore",
-        )
-        with pd.ExcelWriter(output_person, engine="openpyxl") as writer:
-            export_person_df.to_excel(
-                writer, index=False, sheet_name="산정내역서"
+        # 이미지 양식과 일치하는 엑셀 생성 함수
+        def generate_exact_statement_excel(p_data):
+            wb = openpyxl.Workbook()
+            ws = wb.active
+            ws.title = "산정내역서"
+
+            # 눈금선 표시 설정
+            ws.views.sheetView[0].showGridLines = True
+
+            font_title = Font(name="맑은 고딕", size=16, bold=True)
+            font_bold = Font(name="맑은 고딕", size=10, bold=True)
+            font_normal = Font(name="맑은 고딕", size=10, bold=False)
+
+            fill_gray_header = PatternFill(
+                start_color="D9D9D9", end_color="D9D9D9", fill_type="solid"
             )
-        output_person.seek(0)
+            fill_black_header = PatternFill(
+                start_color="262626", end_color="262626", fill_type="solid"
+            )
+            font_white_bold = Font(
+                name="맑은 고딕", size=11, bold=True, color="FFFFFF"
+            )
+
+            thin_border = Border(
+                left=Side(style="thin", color="000000"),
+                right=Side(style="thin", color="000000"),
+                top=Side(style="thin", color="000000"),
+                bottom=Side(style="thin", color="000000"),
+            )
+
+            # 1. 타이틀
+            ws.merge_cells("A1:E1")
+            cell_t = ws["A1"]
+            cell_t.value = "해외출장비 산정 내역서"
+            cell_t.font = font_title
+            cell_t.alignment = Alignment(horizontal="center", vertical="center")
+            ws.row_dimensions[1].height = 40
+
+            # 2. 개인정보 상단 요약 테이블 (2~4행)
+            info_rows = [
+                [
+                    "소속",
+                    p_data.get("부서", ""),
+                    "성명",
+                    p_data.get("출장자성명", ""),
+                    "직급",
+                    p_data.get("직급", ""),
+                ],
+                [
+                    "출장지",
+                    p_data.get("출장지", ""),
+                    "지역구분",
+                    f"{p_data.get('지역구분', '')}급",
+                    "직급구분",
+                    p_data.get("직급구분", ""),
+                ],
+                [
+                    "출발일",
+                    p_data.get("출장시작일", ""),
+                    "도착일",
+                    p_data.get("출장종료일", ""),
+                    "출장기간",
+                    f"{p_data.get('출장박수', 0)}박 {p_data.get('출장일수', 0)}일",
+                ],
+            ]
+
+            # 엑셀 열 레이아웃 (A, B, C, D, E, F) 에 맞추어 매핑
+            for r_idx, r_data in enumerate(info_rows, start=3):
+                ws.row_dimensions[r_idx].height = 22
+                # r_data: [라벨1, 값1, 라벨2, 값2, 라벨3, 값3]
+                ws.cell(row=r_idx, column=1, value=r_data[0])
+                ws.cell(row=r_idx, column=2, value=r_data[1])
+                ws.cell(row=r_idx, column=3, value=r_data[2])
+                ws.cell(row=r_idx, column=4, value=r_data[3])
+                ws.cell(row=r_idx, column=5, value=r_data[4])
+                ws.cell(row=r_idx, column=6, value=r_data[5])
+
+                for c_idx in range(1, 7):
+                    c = ws.cell(row=r_idx, column=c_idx)
+                    c.border = thin_border
+                    c.font = font_normal
+                    if c_idx in [1, 3, 5]:
+                        c.fill = fill_gray_header
+                        c.alignment = Alignment(
+                            horizontal="center", vertical="center"
+                        )
+                        c.font = font_bold
+                    else:
+                        c.alignment = Alignment(
+                            horizontal="center", vertical="center"
+                        )
+
+            # 3. 적용 출장비 산정 기준 섹션 제목
+            ws["A6"] = "■ 적용 출장비 산정 기준"
+            ws["A6"].font = font_bold
+            ws.row_dimensions[6].height = 25
+
+            # 산정 기준 테이블 헤더 (7행)
+            headers_1 = [
+                "구분",
+                "산정 기준",
+                "기간 적용",
+                "금액",
+                "원화 환산 산식",
+            ]
+            for c_idx, h_text in enumerate(headers_1, start=1):
+                cell = ws.cell(row=7, column=c_idx, value=h_text)
+                cell.font = font_bold
+                cell.fill = fill_gray_header
+                cell.alignment = Alignment(
+                    horizontal="center", vertical="center"
+                )
+                cell.border = thin_border
+            ws.row_dimensions[7].height = 22
+
+            region = p_data.get("지역구분", "갑")
+            pos_group = p_data.get("직급구분", "3급이하")
+            std_daily, std_hotel = get_standard_rates(region, pos_group)
+            curr_symbol = "¥" if region == "특" else "USD"
+
+            hotel_str = (
+                "실비"
+                if std_hotel == "실비"
+                else f"{std_hotel}{curr_symbol} / 박"
+            )
+            daily_str = f"{std_daily}{curr_symbol} / 일"
+
+            n_nights = p_data.get("출장박수", 0)
+            n_days = p_data.get("출장일수", 0)
+
+            # 숙박비 행 (8행)
+            hotel_formula = (
+                "실비"
+                if std_hotel == "실비"
+                else f"{std_hotel} * {n_nights}박 * 환율"
+            )
+            hotel_calc_text = (
+                "실비" if std_hotel == "실비" else f"{std_hotel} USD * n박 x 환율"
+            )
+            row_hotel = [
+                "숙박비",
+                hotel_str,
+                f"{n_nights}박",
+                hotel_formula,
+                hotel_calc_text,
+            ]
+            for c_idx, val in enumerate(row_hotel, start=1):
+                cell = ws.cell(row=8, column=c_idx, value=val)
+                cell.border = thin_border
+                cell.font = font_normal
+                cell.alignment = Alignment(
+                    horizontal="center", vertical="center"
+                )
+            ws.row_dimensions[8].height = 22
+
+            # 일당 행 (9행)
+            daily_formula = f"{std_daily} * {n_days}일 * 환율"
+            daily_calc_text = f"{std_daily} USD * m일 x 환율"
+            row_daily = [
+                "일당",
+                daily_str,
+                f"{n_days}일",
+                daily_formula,
+                daily_calc_text,
+            ]
+            for c_idx, val in enumerate(row_daily, start=1):
+                cell = ws.cell(row=9, column=c_idx, value=val)
+                cell.border = thin_border
+                cell.font = font_normal
+                cell.alignment = Alignment(
+                    horizontal="center", vertical="center"
+                )
+            ws.row_dimensions[9].height = 22
+
+            # 지급 총액 행 (10행)
+            ws.cell(row=10, column=1, value="지급 총액").font = font_bold
+            ws.cell(row=10, column=1).fill = fill_gray_header
+            ws.cell(row=10, column=1).alignment = Alignment(
+                horizontal="center", vertical="center"
+            )
+            ws.cell(row=10, column=1).border = thin_border
+
+            ws.merge_cells("B10:C10")
+            ws.cell(row=10, column=2, value="숙박비 + 일당").font = font_bold
+            ws.cell(row=10, column=2).alignment = Alignment(
+                horizontal="center", vertical="center"
+            )
+            ws.cell(row=10, column=2).border = thin_border
+            ws.cell(row=10, column=3).border = thin_border
+
+            ws.merge_cells("D10:E10")
+            total_calc_amt = p_data.get("직원_계좌입금액", 0)
+            ws.cell(
+                row=10, column=4, value=f"{total_calc_amt:,.0f} 원"
+            ).font = font_bold
+            ws.cell(row=10, column=4).alignment = Alignment(
+                horizontal="center", vertical="center"
+            )
+            ws.cell(row=10, column=4).border = thin_border
+            ws.cell(row=10, column=5).border = thin_border
+
+            ws.cell(row=10, column=6, value="").border = thin_border
+            ws.row_dimensions[10].height = 22
+
+            # 4. 해외출장 지급규정 섹션 제목
+            ws["A12"] = "■ 해외출장 지급규정"
+            ws["A12"].font = font_bold
+            ws.row_dimensions[12].height = 25
+
+            # 지급규정 테이블 헤더 (13행)
+            headers_2 = ["지역", "직급", "일당", "숙박", "비고"]
+            ws.merge_cells("D13:E13")
+            ws.cell(row=13, column=1, value=headers_2[0])
+            ws.cell(row=13, column=2, value=headers_2[1])
+            ws.cell(row=13, column=3, value=headers_2[2])
+            ws.cell(row=13, column=4, value=headers_2[3])
+            ws.cell(row=13, column=6, value=headers_2[4])
+
+            for c_idx in [1, 2, 3, 4, 5, 6]:
+                cell = ws.cell(row=13, column=c_idx)
+                cell.font = font_bold
+                cell.fill = fill_gray_header
+                cell.alignment = Alignment(
+                    horizontal="center", vertical="center"
+                )
+                cell.border = thin_border
+            ws.row_dimensions[13].height = 22
+
+            # 규정 데이터 목록
+            rules_data = [
+                (
+                    "갑",
+                    [
+                        ("임원(부사장이상)", "$135", "실비", ""),
+                        ("임원", "$90", "$130", ""),
+                        ("1급", "$70", "$100", ""),
+                        ("2급", "$65", "$95", ""),
+                        ("3급이하", "$60", "$90", ""),
+                    ],
+                ),
+                (
+                    "을",
+                    [
+                        ("임원(부사장이상)", "$130", "실비", ""),
+                        ("임원", "$85", "$125", ""),
+                        ("1급", "$65", "$95", ""),
+                        ("2급", "$60", "$90", ""),
+                        ("3급이하", "$55", "$85", ""),
+                    ],
+                ),
+                (
+                    "병",
+                    [
+                        ("임원(부사장이상)", "$130", "실비", ""),
+                        ("임원", "$80", "$110", ""),
+                        ("1급", "$60", "$90", ""),
+                        ("2급", "$55", "$85", ""),
+                        ("3급이하", "$55", "$80", ""),
+                    ],
+                ),
+                (
+                    "특",
+                    [
+                        ("임원(부사장이상)", "¥23,000", "실비", ""),
+                        ("임원", "¥11,000", "¥17,000", "엔화"),
+                        ("1급", "¥8,000", "¥12,000", "엔화"),
+                        ("2급", "¥7,000", "¥11,000", "엔화"),
+                        ("3급이하", "¥7,000", "¥10,000", "엔화"),
+                    ],
+                ),
+            ]
+
+            curr_row = 14
+            for reg_name, pos_list in rules_data:
+                start_r = curr_row
+                for pos_name, d_val, h_val, note_val in pos_list:
+                    ws.cell(row=curr_row, column=2, value=pos_name)
+                    ws.cell(row=curr_row, column=3, value=d_val)
+                    ws.merge_cells(
+                        start_row=curr_row,
+                        start_column=4,
+                        end_row=curr_row,
+                        end_column=5,
+                    )
+                    ws.cell(row=curr_row, column=4, value=h_val)
+                    ws.cell(row=curr_row, column=6, value=note_val)
+
+                    for c_idx in range(1, 7):
+                        cell = ws.cell(row=curr_row, column=c_idx)
+                        cell.border = thin_border
+                        cell.font = font_normal
+                        cell.alignment = Alignment(
+                            horizontal="center", vertical="center"
+                        )
+                    ws.row_dimensions[curr_row].height = 20
+                    curr_row += 1
+
+                end_r = curr_row - 1
+                if start_r != end_r:
+                    ws.merge_cells(
+                        start_row=start_r,
+                        start_column=1,
+                        end_row=end_r,
+                        end_column=1,
+                    )
+                ws.cell(row=start_r, column=1, value=reg_name)
+                ws.cell(row=start_r, column=1).alignment = Alignment(
+                    horizontal="center", vertical="center"
+                )
+                ws.cell(row=start_r, column=1).font = font_bold
+
+            # 5. 푸터 문구
+            footer_row_1 = curr_row + 1
+            ws.merge_cells(
+                start_row=footer_row_1,
+                start_column=1,
+                end_row=footer_row_1,
+                end_column=6,
+            )
+            f_cell1 = ws.cell(
+                row=footer_row_1,
+                column=1,
+                value="위와 같이 해외출장비를 정산 및 지급합니다.",
+            )
+            f_cell1.font = font_bold
+            f_cell1.alignment = Alignment(
+                horizontal="center", vertical="center"
+            )
+            ws.row_dimensions[footer_row_1].height = 25
+
+            footer_row_2 = footer_row_1 + 1
+            today_str = datetime.date.today().strftime("%Y년 %m월 %d일")
+            ws.merge_cells(
+                start_row=footer_row_2,
+                start_column=1,
+                end_row=footer_row_2,
+                end_column=6,
+            )
+            f_cell2 = ws.cell(
+                row=footer_row_2,
+                column=1,
+                value=f"신청일 : {today_str}",
+            )
+            f_cell2.font = font_normal
+            f_cell2.alignment = Alignment(
+                horizontal="center", vertical="center"
+            )
+            ws.row_dimensions[footer_row_2].height = 22
+
+            # 열 너비 자동 맞춤
+            col_widths = {
+                "A": 16,
+                "B": 18,
+                "C": 14,
+                "D": 14,
+                "E": 14,
+                "F": 16,
+            }
+            for col_letter, width in col_widths.items():
+                ws.column_dimensions[col_letter].width = width
+
+            output = io.BytesIO()
+            wb.save(output)
+            output.seek(0)
+            return output
+
+        output_person = generate_exact_statement_excel(person_data)
 
         st.download_button(
-            label=f"📥 [{selected_person}] 출장자용 산정 내역서 엑셀 다운로드",
+            label=f"📥 [{selected_person}] 출장자용 산정 내역서 엑셀 다운로드 (양식 적용)",
             data=output_person,
             file_name=f"화천기공_해외출장산정내역서_{selected_person}.xlsx",
             mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+            use_container_width=True,
         )
     else:
         st.warning(

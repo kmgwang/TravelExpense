@@ -1109,8 +1109,6 @@ with tab2:
                 "부서",
                 "직급",
                 "출장지",
-                "출장박수",
-                "출장일수",
                 "직원_계좌입금액",
                 "여행사_지급액",
                 "총출장비",
@@ -1125,8 +1123,6 @@ with tab2:
             "부서",
             "직급",
             "출장지",
-            "출장박수",
-            "출장일수",
             "직원지급액",
             "여행사지급액",
             "총합계",
@@ -1146,6 +1142,10 @@ with tab2:
                     "교통비항목리스트",
                     "출장비항목리스트",
                     "기타항목리스트",
+                    "출장시작일",  # 기존 F열 삭제
+                    "출장종료일",  # 기존 G열 삭제
+                    "출장박수",    # 기존 H열 삭제
+                    "출장일수",    # 기존 I열 삭제
                 ]
             )
             excel_save_df.insert(0, "순번", range(1, len(excel_save_df) + 1))
@@ -1162,11 +1162,12 @@ with tab2:
                     for col_idx in range(1, len(excel_save_df.columns) + 1):
                         cell = worksheet.cell(row=row_idx, column=col_idx)
                         
-                        # A~I열 (1~9열): 전체 가운데 정렬
-                        if col_idx <= 9:
+                        # F~I열 삭제로 인해 총 8개 열(A~H)만 존재
+                        # A~E열 (1~5열): 전체 가운데 정렬
+                        if col_idx <= 5:
                             cell.alignment = Alignment(horizontal='center', vertical='center')
                         else:
-                            # J열 이상 (금액/합계 열 등): 1행은 가운데 정렬, 2행부터 오른쪽 정렬
+                            # F~H열 (금액 및 합계 등, 6열 이상): 1행은 가운데 정렬, 2행부터 오른쪽 정렬
                             if row_idx == 1:
                                 cell.alignment = Alignment(horizontal='center', vertical='center')
                             else:

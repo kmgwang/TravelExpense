@@ -1485,10 +1485,9 @@ with tab3:
             ws.cell(row=13, column=3, value=headers_2[2])
             ws.cell(row=13, column=4, value=headers_2[3])
             
-            # 수정요청 4: E13:F13 셀병합 (비고 영역)
+            # 수정요청 4: E13:F13 셀병합 (비고 영역) -> F13에 대한 직접 값 대입 제거
             ws.merge_cells("E13:F13")
             ws.cell(row=13, column=5, value=headers_2[4])
-            ws.cell(row=13, column=6, value="")
 
             for c_idx in range(1, 7):
                 cell = ws.cell(row=13, column=c_idx)
@@ -1551,7 +1550,7 @@ with tab3:
                     ws.cell(row=curr_row, column=3, value=d_val)
                     ws.cell(row=curr_row, column=4, value=h_val)
                     
-                    # 수정요청 4: 각 행의 E와 F셀 병합 (E와 F열 통합)
+                    # 수정요청 4: 각 행의 E와 F셀 병합 -> F열 셀 직접 대입 제거
                     ws.merge_cells(
                         start_row=curr_row,
                         start_column=5,
@@ -1559,7 +1558,6 @@ with tab3:
                         end_column=6,
                     )
                     ws.cell(row=curr_row, column=5, value=note_val)
-                    ws.cell(row=curr_row, column=6, value="")
 
                     for c_idx in range(1, 7):
                         cell = ws.cell(row=curr_row, column=c_idx)
@@ -1645,7 +1643,7 @@ with tab3:
         output_person = generate_exact_statement_excel(person_data)
 
         st.download_button(
-            label=f"📥 [{selected_person}] 출장자용 산정 내역서 엑셀 다운로드 (양식 적용)",
+            label=f"📥 [{selected_person}] 출장자용 산정 내역서 엑셀 다운로드",
             data=output_person,
             file_name=f"화천기공_해외출장산정내역서_{selected_person}.xlsx",
             mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",

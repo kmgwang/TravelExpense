@@ -1251,10 +1251,13 @@ with tab3:
             ws = wb.active
             ws.title = "산정내역서"
 
-            # 인쇄 영역 설정 (A1:F37)
+            # 명시적 인쇄 영역 설정 (A1:F37) 및 페이지 맞춤 설정
             ws.page_setup.printArea = "A1:F37"
             ws.page_setup.orientation = ws.ORIENTATION_PORTRAIT
             ws.page_setup.paperSize = ws.PAPERSIZE_A4
+            ws.sheet_properties.pageSetUpPr.fitToPage = True
+            ws.page_setup.fitToWidth = 1
+            ws.page_setup.fitToHeight = 1
 
             ws.views.sheetView[0].showGridLines = True
 

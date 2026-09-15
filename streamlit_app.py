@@ -89,10 +89,10 @@ if "other_rows" not in st.session_state:
     st.session_state.other_rows = [{"item": "", "amount": 0, "payer": "여행사"}]
 
 
-# 서울외국환중개 환율 조회 함수 (BeautifulSoup 제거 및 정규식 활용 안전 파싱)
+# 서울외국환중개 환율 조회 함수 (이미지 구조에 맞춘 정밀 정규식 파싱)
 @st.cache_data(ttl=3600)
 def fetch_today_exchange_rates():
-    rates = {"USD": 1350.0, "JPY": 900.0}
+    rates = {"USD": 1345.30, "JPY": 872.07}
     try:
         url = "http://www.smbs.biz/ExRate/TodayExRate.jsp"
         headers = {"User-Agent": "Mozilla/5.0"}
@@ -101,8 +101,9 @@ def fetch_today_exchange_rates():
         
         if response.status_code == 200:
             text = response.text
-            # 미국 달러 환율 추출 시도
-            usd_match = re.search(r'미국.*?달러.*?([0-9,]+\.[0-9]+)', text, re.DOTALL)
+            
+            # 미국 달러 (USD) 환율 추출 (예: 미국 달러 (USD) ... 1,345.30 패턴)
+            usd_match = re.search(r'미국\s*달러\s*\(USD\).*?([0-9]{1,3}(?:,[0-9]{3})*\.[0-9]+)', text, re.DOTALL)
             if usd_match:
                 val_str = usd_match.group(1).replace(",", "")
                 try:
@@ -112,8 +113,8 @@ def fetch_today_exchange_rates():
                 except ValueError:
                     pass
             
-            # 일본 엔 환율 추출 시도
-            jpy_match = re.search(r'일본.*?엔.*?([0-9,]+\.[0-9]+)', text, re.DOTALL)
+            # 일본 엔 (JPY) (100) 환율 추출 (예: 일본 엔 (JPY) (100) ... 872.07 패턴)
+            jpy_match = re.search(r'일본\s*엔\s*\(JPY\)\s*\(100\).*?([0-9]{1,3}(?:,[0-9]{3})*\.[0-9]+)', text, re.DOTALL)
             if jpy_match:
                 val_str = jpy_match.group(1).replace(",", "")
                 try:

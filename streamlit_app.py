@@ -983,6 +983,14 @@ with tab1:
         
         display_df.insert(0, "순번", range(1, len(display_df) + 1))
 
+        # [요청 4 반영]: 출장지 열을 순번 열 오른쪽에 오도록 위치 조정
+        if "출장지" in display_df.columns and "순번" in display_df.columns:
+            cols = list(display_df.columns)
+            cols.remove("출장지")
+            seq_idx = cols.index("순번")
+            cols.insert(seq_idx + 1, "출장지")
+            display_df = display_df[cols]
+
         if "출장박수" in display_df.columns:
             display_df["출장박수"] = display_df["출장박수"].apply(
                 lambda x: f"{int(x):,}"
@@ -1117,12 +1125,20 @@ with tab2:
         
         fund_view_df.insert(0, "순번", range(1, len(fund_view_df) + 1))
 
+        # [요청 4 반영]: 출장지 열을 순번 열 오른쪽에 오도록 위치 조정
+        if "출장지" in fund_view_df.columns and "순번" in fund_view_df.columns:
+            cols = list(fund_view_df.columns)
+            cols.remove("출장지")
+            seq_idx = cols.index("순번")
+            cols.insert(seq_idx + 1, "출장지")
+            fund_view_df = fund_view_df[cols]
+
         fund_view_df.columns = [
             "순번",
+            "출장지",
             "성명",
             "부서",
             "직급",
-            "출장지",
             "직원지급액",
             "여행사지급액",
             "총합계",
@@ -1150,6 +1166,14 @@ with tab2:
             )
             excel_save_df.insert(0, "순번", range(1, len(excel_save_df) + 1))
 
+            # [요청 4 반영]: 엑셀 저장용 데이터프레임에서도 출장지 위치 조정
+            if "출장지" in excel_save_df.columns and "순번" in excel_save_df.columns:
+                cols = list(excel_save_df.columns)
+                cols.remove("출장지")
+                seq_idx = cols.index("순번")
+                cols.insert(seq_idx + 1, "출장지")
+                excel_save_df = excel_save_df[cols]
+
             with pd.ExcelWriter(output_agency, engine="openpyxl") as writer:
                 excel_save_df.to_excel(
                     writer, index=False, sheet_name="자금팀_정산집계표"
@@ -1157,32 +1181,40 @@ with tab2:
                 
                 worksheet = writer.sheets["자금팀_정산집계표"]
                 
-                # F, G열(6, 7번째 열) 하늘색 배경 정의
-                light_blue_fill = PatternFill(start_color="D9E1F2", end_color="D9E1F2", fill_type="solid")
+                # [요청 1 & 3 반영]: F열과 G열(인덱스 기준 6번째, 7번째 컬럼 및 F1, G1 헤더 포함) 하늘색 배경 적용
+                fill_sky_blue = PatternFill(start_color="D9E1F2", end_color="D9E1F2", fill_type="solid")
+                fill_fg_mild = PatternFill(start_color="F0F4F8", end_color="F0F4F8", fill_type="solid")
                 font_mild = Font(name="맑은 고딕", size=10, bold=False, color="333333")
                 
                 fill_fg_strong = PatternFill(start_color="1F4E78", end_color="1F4E78", fill_type="solid")
                 font_strong = Font(name="맑은 고딕", size=10, bold=True, color="FFFFFF")
                 
-                # 테두리 스타일 정의 (요청 2번 반영)
-                thick_border_side = Side(style='medium', color='000000')
-                thin_side = Side(style='thin', color='BFBFBF')
-                dashed_side = Side(style='dashed', color='BFBFBF')
-                solid_vert_side = Side(style='thin', color='BFBFBF')
+                # [요청 2 반영]: 테두리 세팅 설정 (1행 굵은 바깥쪽, 2행 이하 안쪽 점선 가로 및 실선 세로)
+                thick_side = Side(style='medium', color='000000')
+                thin_side = Side(style='thin', color='000000')
+                dashed_side = Side(style='dashed', color='000000')
+                
+                max_row = len(excel_save_df) + 1
+                max_col = len(excel_save_df.columns)
 
-                max_r = len(excel_save_df) + 1
-                max_c = len(excel_save_df.columns)
-
-                for row_idx in range(1, max_r + 1):
+                for row_idx in range(1, max_row + 1):
                     worksheet.row_dimensions[row_idx].height = 35.0
                     
-                    for col_idx in range(1, max_c + 1):
+                    for col_idx in range(1, max_col + 1):
                         cell = worksheet.cell(row=row_idx, column=col_idx)
                         
-                        # F, G열(col_idx 6, 7) 배경색을 하늘색으로 지정
-                        if col_idx in [6, 7] and row_idx > 1:
-                            cell.fill = light_blue_fill
+                        # [요청 1 & 3]: F열(6)과 G열(7) 배경색 일괄 적용 (헤더 F1, G1 포함)
+                        if col_idx in [6, 7]:
+                            cell.fill = fill_sky_blue
 
+                        # [요청 2]: 테두리 적용 로직
+                        top_b = thick_side if row_idx == 1 else dashed_side
+                        bottom_b = thick_side if row_idx == max_row else dashed_side
+                        left_b = thick_side if col_idx == 1 else thin_side
+                        right_b = thick_side if col_idx == max_col else thin_side
+                        
+                        cell.border = Border(top=top_b, bottom=bottom_b, left=left_b, right=right_b)
+                        
                         if col_idx <= 5:
                             cell.alignment = Alignment(horizontal='center', vertical='center')
                         else:
@@ -1193,29 +1225,16 @@ with tab2:
                                     cell.font = Font(name="맑은 고딕", size=11, bold=True, color="FFFFFF")
                             else:
                                 cell.alignment = Alignment(horizontal='right', vertical='center')
-                                if col_idx == 8:
+                                
+                                if col_idx in [6, 7]:
+                                    cell.font = font_mild
+                                elif col_idx == 8:
                                     cell.fill = fill_fg_strong
                                     cell.font = font_strong
                         
                         col_name = excel_save_df.columns[col_idx - 1]
                         if any(k in col_name for k in ["금액", "지급액", "총출장비"]):
                             cell.number_format = '#,##0'
-
-                        # 테두리 로직 적용
-                        if row_idx == 1:
-                            # 1행: 굵은 바깥쪽 테두리 (상/하/좌/우)
-                            t_top = thick_border_side
-                            t_bottom = thick_border_side
-                            t_left = thick_border_side if col_idx == 1 else thin_side
-                            t_right = thick_border_side if col_idx == max_c else thin_side
-                            cell.border = Border(top=t_top, bottom=t_bottom, left=t_left, right=t_right)
-                        else:
-                            # 2행 이하: 안쪽 점선 가로 테두리, 안쪽 실선 세로 테두리
-                            t_top = dashed_side
-                            t_bottom = dashed_side if row_idx < max_r else thick_border_side
-                            t_left = thick_border_side if col_idx == 1 else solid_vert_side
-                            t_right = thick_border_side if col_idx == max_c else solid_vert_side
-                            cell.border = Border(top=t_top, bottom=t_bottom, left=t_left, right=t_right)
                 
                 for col in worksheet.columns:
                     max_length = 0

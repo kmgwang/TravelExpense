@@ -9,6 +9,14 @@ import platform
 import openpyxl
 from openpyxl.styles import Alignment, PatternFill, Font, Border, Side
 from openpyxl.utils import get_column_letter
+import base64
+
+from reportlab.lib.pagesizes import A4
+from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Table, TableStyle
+from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
+from reportlab.lib import colors
+from reportlab.pdfbase import pdfmetrics
+from reportlab.pdfbase.ttfonts import TTFonts
 
 if platform.system() == "Windows":
     matplotlib.rc("font", family="Malgun Gothic")
@@ -1646,58 +1654,426 @@ with tab3:
             output.seek(0)
             return output
 
-        output_person = generate_exact_statement_excel(person_data)
+        def generate_exact_statement_pdf(p_data):
+            buffer = io.BytesIO()
+            doc = SimpleDocTemplate(
+                buffer,
+                pagesize=A4,
+                rightMargin=25,
+                leftMargin=25,
+                topMargin=25,
+                bottomMargin=25,
+            )
+            story = []
+
+            font_name = "Helvetica"
+            if platform.system() == "Windows":
+                try:
+                    pdfmetrics.registerFont(
+                        TTFonts("Malgun", "c:/Windows/Fonts/malgun.ttf")
+                    )
+                    font_name = "Malgun"
+                except:
+                    pass
+            elif platform.system() == "Darwin":
+                try:
+                    pdfmetrics.registerFont(
+                        TTFonts("AppleGothic", "/Library/Fonts/AppleGothic.ttf")
+                    )
+                    font_name = "AppleGothic"
+                except:
+                    pass
+            else:
+                try:
+                    pdfmetrics.registerFont(
+                        TTFonts(
+                            "NanumGothic",
+                            "/usr/share/fonts/truetype/nanum/NanumGothic.ttf",
+                        )
+                    )
+                    font_name = "NanumGothic"
+                except:
+                    pass
+
+            title_style = ParagraphStyle(
+                "TitleStyle",
+                fontName=font_name,
+                fontSize=16,
+                leading=20,
+                alignment=1,
+            )
+            bold_style = ParagraphStyle(
+                "BoldStyle",
+                fontName=font_name,
+                fontSize=9,
+                leading=12,
+                alignment=1,
+            )
+            normal_style = ParagraphStyle(
+                "NormalStyle",
+                fontName=font_name,
+                fontSize=9,
+                leading=12,
+                alignment=1,
+            )
+            left_bold = ParagraphStyle(
+                "LeftBold",
+                fontName=font_name,
+                fontSize=9,
+                leading=12,
+                alignment=0,
+            )
+
+            story.append(
+                Paragraph(
+                    f"<b><font face='{font_name}'>해외출장비 산정 내역서</font></b>",
+                    title_style,
+                )
+            )
+            story.append(Spacer(1, 10))
+
+            region_val = p_data.get("지역구분", "")
+            curr_symbol = "¥" if region_val == "특" else "$"
+            raw_rate = p_data.get("환율", 0)
+            applied_rate = (
+                raw_rate / 100.0 if region_val == "특" else raw_rate
+            )
+            rate_str = (
+                f"1 JPY = {applied_rate:,.2f}"
+                if region_val == "특"
+                else f"1 USD = {applied_rate:,.2f}"
+            )
+            today_str = datetime.date.today().strftime("%Y-%m-%d")
+
+            info_data = [
+                [
+                    Paragraph("소속", bold_style),
+                    Paragraph(str(p_data.get("부서", "")), normal_style),
+                    Paragraph("성명", bold_style),
+                    Paragraph(str(p_data.get("출장자성명", "")), normal_style),
+                    Paragraph("직급", bold_style),
+                    Paragraph(str(p_data.get("직급", "")), normal_style),
+                ],
+                [
+                    Paragraph("출장지", bold_style),
+                    Paragraph(str(p_data.get("출장지", "")), normal_style),
+                    Paragraph("지역구분", bold_style),
+                    Paragraph(str(region_val), normal_style),
+                    Paragraph("직급구분", bold_style),
+                    Paragraph(str(p_data.get("직급구분", "")), normal_style),
+                ],
+                [
+                    Paragraph("출발일", bold_style),
+                    Paragraph(str(p_data.get("출장시작일", "")), normal_style),
+                    Paragraph("도착일", bold_style),
+                    Paragraph(str(p_data.get("출장종료일", "")), normal_style),
+                    Paragraph("출장기간", bold_style),
+                    Paragraph(
+                        f"{p_data.get('출장박수', 0)}박 {p_data.get('출장일수', 0)}일",
+                        normal_style,
+                    ),
+                ],
+            ]
+
+            t_info = Table(info_data, colWidths=[65, 95, 65, 95, 65, 95])
+            t_info.setStyle(
+                TableStyle(
+                    [
+                        (
+                            "BACKGROUND",
+                            (0, 0),
+                            (0, -1),
+                            colors.HexColor("#D9D9D9"),
+                        ),
+                        (
+                            "BACKGROUND",
+                            (2, 0),
+                            (2, -1),
+                            colors.HexColor("#D9D9D9"),
+                        ),
+                        (
+                            "BACKGROUND",
+                            (4, 0),
+                            (4, -1),
+                            colors.HexColor("#D9D9D9"),
+                        ),
+                        ("GRID", (0, 0), (-1, -1), 0.5, colors.black),
+                        ("VALIGN", (0, 0), (-1, -1), "MIDDLE"),
+                        ("ALIGN", (0, 0), (-1, -1), "CENTER"),
+                    ]
+                )
+            )
+            story.append(t_info)
+            story.append(Spacer(1, 10))
+
+            story.append(
+                Paragraph(
+                    f"<b><font face='{font_name}'>■ 적용 출장비 산정 기준</font></b>",
+                    left_bold,
+                )
+            )
+            story.append(Spacer(1, 5))
+
+            rate_data = [
+                [
+                    Paragraph("환율", bold_style),
+                    Paragraph(rate_str, normal_style),
+                    "",
+                    "",
+                    Paragraph("환율 산정일자", bold_style),
+                    Paragraph(today_str, normal_style),
+                ]
+            ]
+            t_rate = Table(rate_data, colWidths=[65, 160, 0, 0, 80, 175])
+            t_rate.setStyle(
+                TableStyle(
+                    [
+                        (
+                            "BACKGROUND",
+                            (0, 0),
+                            (0, 0),
+                            colors.HexColor("#D9D9D9"),
+                        ),
+                        (
+                            "BACKGROUND",
+                            (4, 0),
+                            (4, 0),
+                            colors.HexColor("#D9D9D9"),
+                        ),
+                        ("SPAN", (1, 0), (3, 0)),
+                        ("GRID", (0, 0), (-1, -1), 0.5, colors.black),
+                        ("VALIGN", (0, 0), (-1, -1), "MIDDLE"),
+                        ("ALIGN", (0, 0), (-1, -1), "CENTER"),
+                    ]
+                )
+            )
+            story.append(t_rate)
+            story.append(Spacer(1, 8))
+
+            pos_group = p_data.get("직급구분", "3급이하")
+            std_daily, std_hotel = get_standard_rates(region_val, pos_group)
+            hotel_str = (
+                "실비"
+                if std_hotel == "실비"
+                else f"{curr_symbol}{std_hotel:,} / 박"
+            )
+            n_nights = p_data.get("출장박수", 0)
+            n_days = p_data.get("출장일수", 0)
+
+            if std_hotel == "실비":
+                calc_hotel = 0
+                hotel_formula_text = "실비"
+            else:
+                calc_hotel = int(
+                    (std_hotel * applied_rate * n_nights) // 1000 * 1000
+                )
+                hotel_formula_text = f"{curr_symbol}{std_hotel:,} * {n_nights}박 * {applied_rate:,.2f}"
+
+            daily_str = f"{curr_symbol}{std_daily:,} / 일"
+            calc_daily = int(
+                (std_daily * applied_rate * n_days) // 1000 * 1000
+            )
+            daily_formula_text = (
+                f"{curr_symbol}{std_daily:,} * {n_days}일 * {applied_rate:,.2f}"
+            )
+            total_calc_amt = p_data.get(
+                "직원_계좌입금액", calc_hotel + calc_daily
+            )
+
+            calc_data = [
+                [
+                    Paragraph("구분", bold_style),
+                    Paragraph("산정 기준", bold_style),
+                    Paragraph("기간 적용", bold_style),
+                    Paragraph("금액", bold_style),
+                    Paragraph("원화 환산 산식", bold_style),
+                    "",
+                ],
+                [
+                    Paragraph("숙박비", normal_style),
+                    Paragraph(hotel_str, normal_style),
+                    Paragraph(f"{n_nights}박", normal_style),
+                    Paragraph(f"{calc_hotel:,.0f}", normal_style),
+                    Paragraph(hotel_formula_text, normal_style),
+                    "",
+                ],
+                [
+                    Paragraph("일당", normal_style),
+                    Paragraph(daily_str, normal_style),
+                    Paragraph(f"{n_days}일", normal_style),
+                    Paragraph(f"{calc_daily:,.0f}", normal_style),
+                    Paragraph(daily_formula_text, normal_style),
+                    "",
+                ],
+                [
+                    Paragraph("지급 총액", bold_style),
+                    Paragraph("숙박비 + 일당", bold_style),
+                    "",
+                    Paragraph(f"{total_calc_amt:,.0f}", bold_style),
+                    "",
+                    "",
+                ],
+            ]
+
+            t_calc = Table(calc_data, colWidths=[65, 110, 65, 95, 110, 35])
+            t_calc.setStyle(
+                TableStyle(
+                    [
+                        (
+                            "BACKGROUND",
+                            (0, 0),
+                            (-1, 0),
+                            colors.HexColor("#D9D9D9"),
+                        ),
+                        (
+                            "BACKGROUND",
+                            (0, 3),
+                            (0, 3),
+                            colors.HexColor("#D9D9D9"),
+                        ),
+                        ("SPAN", (4, 0), (5, 0)),
+                        ("SPAN", (4, 1), (5, 1)),
+                        ("SPAN", (4, 2), (5, 2)),
+                        ("SPAN", (1, 3), (2, 3)),
+                        ("SPAN", (4, 3), (5, 3)),
+                        ("GRID", (0, 0), (-1, -1), 0.5, colors.black),
+                        ("VALIGN", (0, 0), (-1, -1), "MIDDLE"),
+                        ("ALIGN", (0, 0), (-1, -1), "CENTER"),
+                    ]
+                )
+            )
+            story.append(t_calc)
+            story.append(Spacer(1, 10))
+
+            story.append(
+                Paragraph(
+                    f"<b><font face='{font_name}'>■ 해외출장 지급규정</font></b>",
+                    left_bold,
+                )
+            )
+            story.append(Spacer(1, 5))
+
+            reg_table_data = [
+                [
+                    Paragraph("지역", bold_style),
+                    "",
+                    Paragraph("직급", bold_style),
+                    Paragraph("일당", bold_style),
+                    Paragraph("숙박", bold_style),
+                    Paragraph("비고", bold_style),
+                ],
+                [
+                    Paragraph("갑", normal_style),
+                    "",
+                    Paragraph("임원(부사장이상)", normal_style),
+                    Paragraph("$135", normal_style),
+                    Paragraph("실비", normal_style),
+                    Paragraph("", normal_style),
+                ],
+                [
+                    Paragraph("갑", normal_style),
+                    "",
+                    Paragraph("임원", normal_style),
+                    Paragraph("$90", normal_style),
+                    Paragraph("$130", normal_style),
+                    Paragraph("", normal_style),
+                ],
+                [
+                    Paragraph("갑", normal_style),
+                    "",
+                    Paragraph("1급", normal_style),
+                    Paragraph("$70", normal_style),
+                    Paragraph("$100", normal_style),
+                    Paragraph("", normal_style),
+                ],
+                [
+                    Paragraph("갑", normal_style),
+                    "",
+                    Paragraph("2급", normal_style),
+                    Paragraph("$65", normal_style),
+                    Paragraph("$95", normal_style),
+                    Paragraph("", normal_style),
+                ],
+                [
+                    Paragraph("갑", normal_style),
+                    "",
+                    Paragraph("3급이하", normal_style),
+                    Paragraph("$60", normal_style),
+                    Paragraph("$90", normal_style),
+                    Paragraph("", normal_style),
+                ],
+            ]
+            t_reg = Table(reg_table_data, colWidths=[30, 45, 105, 110, 110, 80])
+            t_reg.setStyle(
+                TableStyle(
+                    [
+                        (
+                            "BACKGROUND",
+                            (0, 0),
+                            (-1, 0),
+                            colors.HexColor("#D9D9D9"),
+                        ),
+                        ("SPAN", (0, 0), (1, 0)),
+                        ("SPAN", (0, 1), (1, 5)),
+                        ("GRID", (0, 0), (-1, -1), 0.5, colors.black),
+                        ("VALIGN", (0, 0), (-1, -1), "MIDDLE"),
+                        ("ALIGN", (0, 0), (-1, -1), "CENTER"),
+                    ]
+                )
+            )
+            story.append(t_reg)
+            story.append(Spacer(1, 15))
+
+            story.append(
+                Paragraph(
+                    "<b>위와 같이 해외출장비를 정산 및 지급합니다.</b>", bold_style
+                )
+            )
+            story.append(Spacer(1, 8))
+            story.append(
+                Paragraph(
+                    f"<b>신청일 : {datetime.date.today().strftime('%Y년 %m월 %d일')}</b>",
+                    bold_style,
+                )
+            )
+
+            doc.build(story)
+            buffer.seek(0)
+            return buffer
+
+        output_person_excel = generate_exact_statement_excel(person_data)
+        output_person_pdf = generate_exact_statement_pdf(person_data)
 
         st.markdown("<br>", unsafe_allow_html=True)
         st.markdown(f"#### 📄 [{selected_person}] 님 해외출장비 산정 내역서 미리보기 및 다운로드")
 
-        pdf_preview_container = st.container()
-        with pdf_preview_container:
-            st.info(
-                "💡 아래에서 산정 내역서의 문서 미리웨이브를 확인하시거나, 파일로 다운로드하실 수 있습니다."
+        col_pdf_btn, col_excel_btn = st.columns(2)
+
+        with col_pdf_btn:
+            st.download_button(
+                label=f"📥 [{selected_person}] 출장자용 산정 내역서 PDF 다운로드",
+                data=output_person_pdf,
+                file_name=f"화천기공_해외출장산정내역서_{selected_person}.pdf",
+                mime="application/pdf",
+                use_container_width=True,
             )
 
-            col_pdf_btn, col_excel_btn = st.columns(2)
+        with col_excel_btn:
+            st.download_button(
+                label=f"📥 [{selected_person}] 출장자용 산정 내역서 엑셀 다운로드",
+                data=output_person_excel,
+                file_name=f"화천기공_해외출장산정내역서_{selected_person}.xlsx",
+                mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                use_container_width=True,
+            )
 
-            with col_pdf_btn:
-                st.download_button(
-                    label=f"📥 [{selected_person}] 출장자용 산정 내역서 PDF 다운로드",
-                    data=output_person,
-                    file_name=f"화천기공_해외출장산정내역서_{selected_person}.pdf",
-                    mime="application/pdf",
-                    use_container_width=True,
-                )
+        st.markdown("<br>", unsafe_allow_html=True)
+        st.markdown("**📋 [출력 페이지 미리보기: PDF 문서 렌더링]**")
 
-            with col_excel_btn:
-                st.download_button(
-                    label=f"📥 [{selected_person}] 출장자용 산정 내역서 엑셀 다운로드",
-                    data=output_person,
-                    file_name=f"화천기공_해외출장산정내역서_{selected_person}.xlsx",
-                    mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-                    use_container_width=True,
-                )
-
-            # 오류를 일으키던 % 포맷팅 구문을 f-string으로 안전하게 수정
-            preview_html = f"""
-            <div style="border: 1px solid #d6d6d6; padding: 20px; border-radius: 8px; background-color: #f9f9f9; text-align: center;">
-                <p style="color: #666; font-weight: bold; margin-bottom: 10px;">📋 [출력 페이지 미리보기: A4 세로 규격]</p>
-                <div style="background-color: white; padding: 15px; border: 1px solid #ccc; box-shadow: 0px 0px 5px rgba(0,0,0,0.1); display: inline-block; width: 100%; max-width: 700px; text-align: left;">
-                    <h3 style="text-align: center; border-bottom: 2px solid #333; padding-bottom: 10px;">해외출장비 산정 내역서</h3>
-                    <table style="width: 100%; border-collapse: collapse; font-size: 13px; margin-top: 10px;">
-                        <tr style="background-color: #f2f2f2;"><td style="border: 1px solid #ddd; padding: 6px; font-weight: bold; text-align: center;">소속</td><td style="border: 1px solid #ddd; padding: 6px;">{person_data.get('부서', '-')}</td><td style="border: 1px solid #ddd; padding: 6px; font-weight: bold; text-align: center;">성명</td><td style="border: 1px solid #ddd; padding: 6px;">{selected_person}</td></tr>
-                        <tr style="background-color: #f2f2f2;"><td style="border: 1px solid #ddd; padding: 6px; font-weight: bold; text-align: center;">출장지</td><td style="border: 1px solid #ddd; padding: 6px;">{person_data.get('출장지', '-')}</td><td style="border: 1px solid #ddd; padding: 6px; font-weight: bold; text-align: center;">출장기간</td><td style="border: 1px solid #ddd; padding: 6px;">{person_data.get('출장박수', 0)}박 {person_data.get('출장일수', 0)}일</td></tr>
-                    </table>
-                    <br>
-                    <table style="width: 100%; border-collapse: collapse; font-size: 13px;">
-                        <tr style="background-color: #e6e6e6;"><th style="border: 1px solid #ddd; padding: 6px;">구분</th><th style="border: 1px solid #ddd; padding: 6px;">산정 기준</th><th style="border: 1px solid #ddd; padding: 6px;">기간 적용</th><th style="border: 1px solid #ddd; padding: 6px;">금액</th></tr>
-                        <tr><td style="border: 1px solid #ddd; padding: 6px; text-align: center;">숙박비</td><td style="border: 1px solid #ddd; padding: 6px; text-align: center;">적용 기준</td><td style="border: 1px solid #ddd; padding: 6px; text-align: center;">{person_data.get('출장박수', 0)}박</td><td style="border: 1px solid #ddd; padding: 6px; text-align: right;">산정 완료</td></tr>
-                        <tr><td style="border: 1px solid #ddd; padding: 6px; text-align: center;">일당</td><td style="border: 1px solid #ddd; padding: 6px; text-align: center;">적용 기준</td><td style="border: 1px solid #ddd; padding: 6px; text-align: center;">{person_data.get('출장일수', 0)}일</td><td style="border: 1px solid #ddd; padding: 6px; text-align: right;">산정 완료</td></tr>
-                    </table>
-                    <div style="margin-top: 15px; text-align: center; font-size: 12px; color: #888;">[화천기공 인사지원팀 해외출장 정산시스템]</div>
-                </div>
-            </div>
-            """
-            st.markdown(preview_html, unsafe_allow_html=True)
+        # 미리보기에 실제 PDF 파일이 렌더링되도록 base64 iframe 활용
+        base64_pdf = base64.b64encode(output_person_pdf.getvalue()).decode("utf-8")
+        pdf_display = f'<iframe src="data:application/pdf;base64,{base64_pdf}" width="100%" height="700px" type="application/pdf"></iframe>'
+        st.markdown(pdf_display, unsafe_allow_html=True)
 
     else:
         st.warning(

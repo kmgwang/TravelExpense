@@ -277,64 +277,6 @@ def process_travel_data(data_list):
     return df
 
 
-def generate_table_image(df):
-    fig, ax = plt.subplots(figsize=(16, len(df) * 0.8 + 2.5), dpi=300)
-    ax.axis("off")
-    ax.axis("tight")
-
-    formatted_df = df.copy()
-    for col in formatted_df.columns:
-        if (
-            "금액" in col
-            or "합계" in col
-            or "지급액" in col
-            or col in ["출장박수", "출장일수", "순번"]
-        ):
-            formatted_df[col] = formatted_df[col].apply(
-                lambda x: f"{int(x):,}" if pd.notnull(x) and str(x).replace('.','',1).isdigit() else str(x)
-            )
-
-    table = ax.table(
-        cellText=formatted_df.values,
-        colLabels=formatted_df.columns,
-        cellLoc="center",
-        loc="center",
-    )
-    table.auto_set_font_size(False)
-    table.set_fontsize(11)
-    table.scale(1.2, 1.8)
-
-    for key, cell in table.get_celld().items():
-        cell.set_edgecolor("#d0d0d0")
-        if key[0] == 0:
-            cell.set_facecolor("#2c3e50")
-            cell.set_text_props(
-                weight="bold", color="#ffffff", fontsize=11, fontfamily="sans-serif"
-            )
-        else:
-            if key[0] % 2 == 0:
-                cell.set_facecolor("#f8f9fa")
-            else:
-                cell.set_facecolor("#ffffff")
-            cell.set_text_props(
-                color="#333333", fontsize=10, fontfamily="sans-serif"
-            )
-
-    plt.title(
-        "화천기공 자금팀 송금 요청 분리 집계표",
-        fontsize=16,
-        weight="bold",
-        pad=20,
-    )
-    plt.tight_layout()
-
-    buf = io.BytesIO()
-    plt.savefig(buf, format="png", bbox_inches="tight")
-    plt.close(fig)
-    buf.seek(0)
-    return buf
-
-
 tab1, tab2, tab3 = st.tabs(
     [
         "📋 1. 출장 정보 입력",
@@ -1144,125 +1086,113 @@ with tab2:
         st.dataframe(fund_view_df, use_container_width=True)
 
         st.markdown("<br>", unsafe_allow_html=True)
-        col_down1, col_down2 = st.columns(2)
 
-        with col_down1:
-            output_agency = io.BytesIO()
-            excel_save_df = processed_df.drop(
-                columns=[
-                    "직급구분",
-                    "지역구분",
-                    "환율",
-                    "교통비항목리스트",
-                    "출장비항목리스트",
-                    "기타항목리스트",
-                    "출장시작일",
-                    "출장종료일",
-                    "출장박수",
-                    "출장일수",
-                ]
+        output_agency = io.BytesIO()
+        excel_save_df = processed_df.drop(
+            columns=[
+                "직급구분",
+                "지역구분",
+                "환율",
+                "교통비항목리스트",
+                "출장비항목리스트",
+                "기타항목리스트",
+                "출장시작일",
+                "출장종료일",
+                "출장박수",
+                "출장일수",
+            ]
+        )
+        excel_save_df.insert(0, "순번", range(1, len(excel_save_df) + 1))
+
+        if "출장지" in excel_save_df.columns and "순번" in excel_save_df.columns:
+            cols = list(excel_save_df.columns)
+            cols.remove("출장지")
+            seq_idx = cols.index("순번")
+            cols.insert(seq_idx + 1, "출장지")
+            excel_save_df = excel_save_df[cols]
+
+        with pd.ExcelWriter(output_agency, engine="openpyxl") as writer:
+            excel_save_df.to_excel(
+                writer, index=False, sheet_name="자금팀_정산집계표"
             )
-            excel_save_df.insert(0, "순번", range(1, len(excel_save_df) + 1))
+            
+            worksheet = writer.sheets["자금팀_정산집계표"]
+            
+            fill_sky_blue = PatternFill(start_color="D9E1F2", end_color="D9E1F2", fill_type="solid")
+            font_mild = Font(name="맑은 고딕", size=10, bold=False, color="333333")
+            
+            fill_fg_strong = PatternFill(start_color="1F4E78", end_color="1F4E78", fill_type="solid")
+            font_strong = Font(name="맑은 고딕", size=10, bold=True, color="FFFFFF")
+            
+            thick_side = Side(style='medium', color='000000')
+            thin_side = Side(style='thin', color='000000')
+            dashed_side = Side(style='dashed', color='000000')
+            
+            max_row = len(excel_save_df) + 1
+            max_col = len(excel_save_df.columns)
 
-            if "출장지" in excel_save_df.columns and "순번" in excel_save_df.columns:
-                cols = list(excel_save_df.columns)
-                cols.remove("출장지")
-                seq_idx = cols.index("순번")
-                cols.insert(seq_idx + 1, "출장지")
-                excel_save_df = excel_save_df[cols]
-
-            with pd.ExcelWriter(output_agency, engine="openpyxl") as writer:
-                excel_save_df.to_excel(
-                    writer, index=False, sheet_name="자금팀_정산집계표"
-                )
+            for row_idx in range(1, max_row + 1):
+                worksheet.row_dimensions[row_idx].height = 35.0
                 
-                worksheet = writer.sheets["자금팀_정산집계표"]
-                
-                fill_sky_blue = PatternFill(start_color="D9E1F2", end_color="D9E1F2", fill_type="solid")
-                font_mild = Font(name="맑은 고딕", size=10, bold=False, color="333333")
-                
-                fill_fg_strong = PatternFill(start_color="1F4E78", end_color="1F4E78", fill_type="solid")
-                font_strong = Font(name="맑은 고딕", size=10, bold=True, color="FFFFFF")
-                
-                thick_side = Side(style='medium', color='000000')
-                thin_side = Side(style='thin', color='000000')
-                dashed_side = Side(style='dashed', color='000000')
-                
-                max_row = len(excel_save_df) + 1
-                max_col = len(excel_save_df.columns)
-
-                for row_idx in range(1, max_row + 1):
-                    worksheet.row_dimensions[row_idx].height = 35.0
+                for col_idx in range(1, max_col + 1):
+                    cell = worksheet.cell(row=row_idx, column=col_idx)
                     
-                    for col_idx in range(1, max_col + 1):
-                        cell = worksheet.cell(row=row_idx, column=col_idx)
-                        
-                        if col_idx in [6, 7]:
-                            cell.fill = fill_sky_blue
+                    if col_idx in [6, 7]:
+                        cell.fill = fill_sky_blue
 
+                    if row_idx == 1:
+                        top_b = thick_side
+                        bottom_b = thick_side
+                    else:
+                        top_b = dashed_side
+                        bottom_b = thick_side if row_idx == max_row else dashed_side
+
+                    left_b = thick_side if col_idx == 1 else thin_side
+                    right_b = thick_side if col_idx == max_col else thin_side
+                    
+                    cell.border = Border(top=top_b, bottom=bottom_b, left=left_b, right=right_b)
+                    
+                    if col_idx <= 5:
+                        cell.alignment = Alignment(horizontal='center', vertical='center')
+                    else:
                         if row_idx == 1:
-                            top_b = thick_side
-                            bottom_b = thick_side
-                        else:
-                            top_b = dashed_side
-                            bottom_b = thick_side if row_idx == max_row else dashed_side
-
-                        left_b = thick_side if col_idx == 1 else thin_side
-                        right_b = thick_side if col_idx == max_col else thin_side
-                        
-                        cell.border = Border(top=top_b, bottom=bottom_b, left=left_b, right=right_b)
-                        
-                        if col_idx <= 5:
                             cell.alignment = Alignment(horizontal='center', vertical='center')
+                            if col_idx == 8:
+                                cell.fill = fill_fg_strong
+                                cell.font = Font(name="맑은 고딕", size=11, bold=True, color="FFFFFF")
                         else:
-                            if row_idx == 1:
-                                cell.alignment = Alignment(horizontal='center', vertical='center')
-                                if col_idx == 8:
-                                    cell.fill = fill_fg_strong
-                                    cell.font = Font(name="맑은 고딕", size=11, bold=True, color="FFFFFF")
-                            else:
-                                cell.alignment = Alignment(horizontal='right', vertical='center')
-                                
-                                if col_idx in [6, 7]:
-                                    cell.font = font_mild
-                                elif col_idx == 8:
-                                    cell.fill = fill_fg_strong
-                                    cell.font = font_strong
-                        
-                        col_name = excel_save_df.columns[col_idx - 1]
-                        if any(k in col_name for k in ["금액", "지급액", "총출장비"]):
-                            cell.number_format = '#,##0'
-                
-                for col in worksheet.columns:
-                    max_length = 0
-                    col_letter = col[0].column_letter
-                    for cell in col:
-                        try:
-                            if cell.value:
-                                max_length = max(max_length, len(str(cell.value)))
-                        except:
-                            pass
-                    worksheet.column_dimensions[col_letter].width = max(max_length + 5, 14)
+                            cell.alignment = Alignment(horizontal='right', vertical='center')
+                            
+                            if col_idx in [6, 7]:
+                                cell.font = font_mild
+                            elif col_idx == 8:
+                                cell.fill = fill_fg_strong
+                                cell.font = font_strong
                     
-            output_agency.seek(0)
+                    col_name = excel_save_df.columns[col_idx - 1]
+                    if any(k in col_name for k in ["금액", "지급액", "총출장비"]):
+                        cell.number_format = '#,##0'
+            
+            for col in worksheet.columns:
+                max_length = 0
+                col_letter = col[0].column_letter
+                for cell in col:
+                    try:
+                        if cell.value:
+                            max_length = max(max_length, len(str(cell.value)))
+                    except:
+                        pass
+                worksheet.column_dimensions[col_letter].width = max(max_length + 5, 14)
+                
+        output_agency.seek(0)
 
-            st.download_button(
-                label="📥 자금팀 정산 집계표 엑셀 다운로드",
-                data=output_agency,
-                file_name="화천기공_자금팀_출장정산집계표.xlsx",
-                mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-                use_container_width=True,
-            )
-
-        with col_down2:
-            img_buf = generate_table_image(fund_view_df)
-            st.download_button(
-                label="🖼️ 자금팀 정산 집계표 이미지 다운로드 (PNG)",
-                data=img_buf,
-                file_name="화천기공_자금팀_출장정산집계표.png",
-                mime="image/png",
-                use_container_width=True,
-            )
+        st.download_button(
+            label="📥 자금팀 정산 집계표 엑셀 다운로드",
+            data=output_agency,
+            file_name="화천기공_자금팀_출장정산집계표.xlsx",
+            mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+            use_container_width=True,
+        )
     else:
         st.warning(
             "⚠️ 입력된 출장 정보가 없습니다. [1. 출장 정보 입력] 탭에서 데이터를 먼저 입력해 주세요."

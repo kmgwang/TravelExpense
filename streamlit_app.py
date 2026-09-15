@@ -18,6 +18,29 @@ from reportlab.lib import colors
 from reportlab.pdfbase import pdfmetrics
 from reportlab.pdfbase.ttfonts import TTFonts
 
+import streamlit as st
+import pandas as pd
+
+# ReportLab 임포트 예외 처리 (배포 환경 누락 방지)
+try:
+    from reportlab.lib.pagesizes import A4
+    from reportlab.pdfgen import canvas
+    from reportlab.pdfbase import pdfmetrics
+    from reportlab.pdfbase.ttfonts import TTFonts
+    REPORTLAB_AVAILABLE = True
+except ImportError:
+    REPORTLAB_AVAILABLE = False
+
+st.title("해외 출장 정산서 자동 생성 시스템")
+
+if not REPORTLAB_AVAILABLE:
+    st.error("⚠️ ReportLab 라이브러리가 설치되어 있지 않습니다. requirements.txt에 'reportlab'을 추가해 주세요.")
+else:
+    st.success("✅ ReportLab 모듈이 정상적으로 로드되었습니다.")
+    
+    # 예시: 폰트 등록 및 PDF 생성 로직 구현 위치
+    # 맑은 고딕 또는 기본 폰트 설정 경로 확인 필요
+
 if platform.system() == "Windows":
     matplotlib.rc("font", family="Malgun Gothic")
 elif platform.system() == "Darwin":

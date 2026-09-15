@@ -976,13 +976,10 @@ with tab1:
                 "기타항목리스트",
                 "지역구분",
                 "직급구분",
+                "환율",
             ]
         ).reset_index(drop=True).copy()
 
-        if "환율" in display_df.columns:
-            display_df["환율"] = display_df["환율"].apply(
-                lambda x: f"{float(x):,.2f}"
-            )
         if "출장박수" in display_df.columns:
             display_df["출장박수"] = display_df["출장박수"].apply(
                 lambda x: f"{int(x):,}"
@@ -1108,9 +1105,7 @@ with tab2:
                 "출장자성명",
                 "부서",
                 "직급",
-                "직급구분",
                 "출장지",
-                "지역구분",
                 "출장박수",
                 "출장일수",
                 "직원_계좌입금액",
@@ -1122,9 +1117,7 @@ with tab2:
             "성명",
             "부서",
             "직급",
-            "직급구분",
             "출장지",
-            "지역구분",
             "출장박수",
             "출장일수",
             "직원지급액",
@@ -1139,7 +1132,14 @@ with tab2:
         with col_down1:
             output_agency = io.BytesIO()
             excel_save_df = processed_df.drop(
-                columns=["교통비항목리스트", "출장비항목리스트", "기타항목리스트"]
+                columns=[
+                    "직급구분",
+                    "지역구분",
+                    "환율",
+                    "교통비항목리스트",
+                    "출장비항목리스트",
+                    "기타항목리스트",
+                ]
             )
             with pd.ExcelWriter(output_agency, engine="openpyxl") as writer:
                 excel_save_df.to_excel(
@@ -1148,11 +1148,13 @@ with tab2:
                 
                 worksheet = writer.sheets["자금팀_정산집계표"]
                 
-                # 금액 관련 열(직원_계좌입금액, 여행사_지급액, 총출장비 등 L, M, N열 포함) 천단위 콤마 서식 적용
+                # 금액 관련 열 천단위 콤마 서식 적용 (직원_계좌입금액, 여행사_지급액, 총출장비 열 인덱스 자동 대응)
                 for row_idx in range(2, len(excel_save_df) + 2):
-                    for col_idx in [12, 13, 14]:
-                        cell = worksheet.cell(row=row_idx, column=col_idx)
-                        cell.number_format = '#,##0'
+                    for col_idx in range(1, len(excel_save_df.columns) + 1):
+                        col_name = excel_save_df.columns[col_idx - 1]
+                        if any(k in col_name for k in ["금액", "지급액", "총출장비"]):
+                            cell = worksheet.cell(row=row_idx, column=col_idx)
+                            cell.number_format = '#,##0'
                 
                 # 모든 열 너비 자동 조절 (내용 잘림 방지 및 여유 공간 부여)
                 for col in worksheet.columns:
@@ -1244,7 +1246,7 @@ with tab3:
             label=f"📥 [{selected_person}] 출장자용 산정 내역서 엑셀 다운로드",
             data=output_person,
             file_name=f"화천기공_해외출장산정내역서_{selected_person}.xlsx",
-            mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+            mime="application/vnd.openpyxl.spreadsheetml.sheet",
         )
     else:
         st.warning(

@@ -1272,12 +1272,15 @@ with tab3:
                 bottom=Side(style="thin", color="000000"),
             )
 
-            ws.merge_cells("A1:E1")
+            # 수정요청 3: A1:F1 셀병합
+            ws.merge_cells("A1:F1")
             cell_t = ws["A1"]
             cell_t.value = "해외출장비 산정 내역서"
             cell_t.font = font_title
             cell_t.alignment = Alignment(horizontal="center", vertical="center")
             ws.row_dimensions[1].height = 40
+            for c_idx in range(1, 7):
+                ws.cell(row=1, column=c_idx).border = thin_border
 
             # 2. 지역구분 값 ('급' 제거, 갑/을/병/특 만 표시)
             region_val = p_data.get("지역구분", "")
@@ -1344,14 +1347,23 @@ with tab3:
                 "금액",
                 "원화 환산 산식",
             ]
-            for c_idx, h_text in enumerate(headers_1, start=1):
-                cell = ws.cell(row=7, column=c_idx, value=h_text)
+            for c_idx in range(1, 5):
+                cell = ws.cell(row=7, column=c_idx, value=headers_1[c_idx - 1])
                 cell.font = font_bold
                 cell.fill = fill_gray_header
                 cell.alignment = Alignment(
                     horizontal="center", vertical="center"
                 )
                 cell.border = thin_border
+
+            # 수정요청 2: E7과 F7 셀병합
+            ws.merge_cells("E7:F7")
+            cell_e7 = ws.cell(row=7, column=5, value=headers_1[4])
+            cell_e7.font = font_bold
+            cell_e7.fill = fill_gray_header
+            cell_e7.alignment = Alignment(horizontal="center", vertical="center")
+            cell_e7.border = thin_border
+            ws.cell(row=7, column=6).border = thin_border
             ws.row_dimensions[7].height = 22
 
             pos_group = p_data.get("직급구분", "3급이하")
@@ -1370,13 +1382,11 @@ with tab3:
             raw_rate = p_data.get("환율", 0)
             applied_rate = raw_rate / 100.0 if region_val == "특" else raw_rate
 
-            # 3. 숙박비 값인 D8셀에 자동 산정된 숙박비 값 입력
             if std_hotel == "실비":
                 calc_hotel = 0
             else:
                 calc_hotel = int((std_hotel * applied_rate * n_nights) // 1000 * 1000)
 
-            # 5. 원화 환산 산식 (E8, E9에 산정 기준 * 기간 적용 * 환율 반영)
             hotel_formula_text = (
                 "실비"
                 if std_hotel == "실비"
@@ -1388,7 +1398,6 @@ with tab3:
                 hotel_str,
                 f"{n_nights}박",
                 calc_hotel,
-                hotel_formula_text,
             ]
             for c_idx, val in enumerate(row_hotel, start=1):
                 cell = ws.cell(row=8, column=c_idx, value=val)
@@ -1399,9 +1408,16 @@ with tab3:
                 )
                 if c_idx == 4 and isinstance(val, (int, float)):
                     cell.number_format = "#,##0"
+
+            # 수정요청 2: E8과 F8 셀병합
+            ws.merge_cells("E8:F8")
+            cell_e8 = ws.cell(row=8, column=5, value=hotel_formula_text)
+            cell_e8.border = thin_border
+            cell_e8.font = font_normal
+            cell_e8.alignment = Alignment(horizontal="center", vertical="center")
+            ws.cell(row=8, column=6).border = thin_border
             ws.row_dimensions[8].height = 22
 
-            # 4. 일당 값인 D9셀에 자동 산정된 일당 값 입력
             calc_daily = int((std_daily * applied_rate * n_days) // 1000 * 1000)
             daily_formula_text = f"산정기준({std_daily}) * 일수({n_days}) * 환율({applied_rate:,.2f})"
 
@@ -1410,7 +1426,6 @@ with tab3:
                 daily_str,
                 f"{n_days}일",
                 calc_daily,
-                daily_formula_text,
             ]
             for c_idx, val in enumerate(row_daily, start=1):
                 cell = ws.cell(row=9, column=c_idx, value=val)
@@ -1421,6 +1436,14 @@ with tab3:
                 )
                 if c_idx == 4 and isinstance(val, (int, float)):
                     cell.number_format = "#,##0"
+
+            # 수정요청 2: E9과 F9 셀병합
+            ws.merge_cells("E9:F9")
+            cell_e9 = ws.cell(row=9, column=5, value=daily_formula_text)
+            cell_e9.border = thin_border
+            cell_e9.font = font_normal
+            cell_e9.alignment = Alignment(horizontal="center", vertical="center")
+            ws.cell(row=9, column=6).border = thin_border
             ws.row_dimensions[9].height = 22
 
             ws.cell(row=10, column=1, value="지급 총액").font = font_bold
@@ -1438,19 +1461,18 @@ with tab3:
             ws.cell(row=10, column=2).border = thin_border
             ws.cell(row=10, column=3).border = thin_border
 
-            ws.merge_cells("D10:E10")
+            # 수정요청 1: 숙박비+일당의 값은 D10셀에 적용
             total_calc_amt = p_data.get("직원_계좌입금액", 0)
-            ws.cell(
-                row=10, column=4, value=total_calc_amt
-            ).font = font_bold
+            ws.cell(row=10, column=4, value=total_calc_amt).font = font_bold
             ws.cell(row=10, column=4).alignment = Alignment(
                 horizontal="center", vertical="center"
             )
             ws.cell(row=10, column=4).border = thin_border
             ws.cell(row=10, column=4).number_format = "#,##0"
-            ws.cell(row=10, column=5).border = thin_border
 
-            ws.cell(row=10, column=6, value="").border = thin_border
+            ws.merge_cells("E10:F10")
+            ws.cell(row=10, column=5).border = thin_border
+            ws.cell(row=10, column=6).border = thin_border
             ws.row_dimensions[10].height = 22
 
             ws["A12"] = "■ 해외출장 지급규정"
@@ -1458,14 +1480,17 @@ with tab3:
             ws.row_dimensions[12].height = 25
 
             headers_2 = ["지역", "직급", "일당", "숙박", "비고"]
-            ws.merge_cells("D13:E13")
             ws.cell(row=13, column=1, value=headers_2[0])
             ws.cell(row=13, column=2, value=headers_2[1])
             ws.cell(row=13, column=3, value=headers_2[2])
             ws.cell(row=13, column=4, value=headers_2[3])
-            ws.cell(row=13, column=6, value=headers_2[4])
+            
+            # 수정요청 4: E13:F13 셀병합 (비고 영역)
+            ws.merge_cells("E13:F13")
+            ws.cell(row=13, column=5, value=headers_2[4])
+            ws.cell(row=13, column=6, value="")
 
-            for c_idx in [1, 2, 3, 4, 5, 6]:
+            for c_idx in range(1, 7):
                 cell = ws.cell(row=13, column=c_idx)
                 cell.font = font_bold
                 cell.fill = fill_gray_header
@@ -1524,14 +1549,17 @@ with tab3:
                 for pos_name, d_val, h_val, note_val in pos_list:
                     ws.cell(row=curr_row, column=2, value=pos_name)
                     ws.cell(row=curr_row, column=3, value=d_val)
+                    ws.cell(row=curr_row, column=4, value=h_val)
+                    
+                    # 수정요청 4: 각 행의 E와 F셀 병합 (E와 F열 통합)
                     ws.merge_cells(
                         start_row=curr_row,
-                        start_column=4,
+                        start_column=5,
                         end_row=curr_row,
-                        end_column=5,
+                        end_column=6,
                     )
-                    ws.cell(row=curr_row, column=4, value=h_val)
-                    ws.cell(row=curr_row, column=6, value=note_val)
+                    ws.cell(row=curr_row, column=5, value=note_val)
+                    ws.cell(row=curr_row, column=6, value="")
 
                     for c_idx in range(1, 7):
                         cell = ws.cell(row=curr_row, column=c_idx)
@@ -1574,6 +1602,8 @@ with tab3:
                 horizontal="center", vertical="center"
             )
             ws.row_dimensions[footer_row_1].height = 25
+            for c_idx in range(1, 7):
+                ws.cell(row=footer_row_1, column=c_idx).border = thin_border
 
             footer_row_2 = footer_row_1 + 1
             today_str = datetime.date.today().strftime("%Y년 %m월 %d일")
@@ -1593,14 +1623,16 @@ with tab3:
                 horizontal="center", vertical="center"
             )
             ws.row_dimensions[footer_row_2].height = 22
+            for c_idx in range(1, 7):
+                ws.cell(row=footer_row_2, column=c_idx).border = thin_border
 
             col_widths = {
                 "A": 16,
                 "B": 18,
                 "C": 14,
                 "D": 16,
-                "E": 28,
-                "F": 16,
+                "E": 20,
+                "F": 20,
             }
             for col_letter, width in col_widths.items():
                 ws.column_dimensions[col_letter].width = width

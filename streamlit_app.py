@@ -278,7 +278,8 @@ def process_travel_data(data_list):
 
 
 def generate_table_image(df):
-    fig, ax = plt.subplots(figsize=(14, len(df) * 0.8 + 2.5), dpi=300)
+    # A열부터 H열까지 전체 데이터프레임이 모두 포함되도록 figure 폭을 넉넉하게 설정
+    fig, ax = plt.subplots(figsize=(16, len(df) * 0.8 + 2.5), dpi=300)
     ax.axis("off")
     ax.axis("tight")
 
@@ -983,7 +984,6 @@ with tab1:
         
         display_df.insert(0, "순번", range(1, len(display_df) + 1))
 
-        # [요청 4 반영]: 출장지 열을 순번 열 오른쪽에 오도록 위치 조정
         if "출장지" in display_df.columns and "순번" in display_df.columns:
             cols = list(display_df.columns)
             cols.remove("출장지")
@@ -1125,7 +1125,6 @@ with tab2:
         
         fund_view_df.insert(0, "순번", range(1, len(fund_view_df) + 1))
 
-        # [요청 4 반영]: 출장지 열을 순번 열 오른쪽에 오도록 위치 조정
         if "출장지" in fund_view_df.columns and "순번" in fund_view_df.columns:
             cols = list(fund_view_df.columns)
             cols.remove("출장지")
@@ -1166,7 +1165,6 @@ with tab2:
             )
             excel_save_df.insert(0, "순번", range(1, len(excel_save_df) + 1))
 
-            # [요청 4 반영]: 엑셀 저장용 데이터프레임에서도 출장지 위치 조정
             if "출장지" in excel_save_df.columns and "순번" in excel_save_df.columns:
                 cols = list(excel_save_df.columns)
                 cols.remove("출장지")
@@ -1181,15 +1179,12 @@ with tab2:
                 
                 worksheet = writer.sheets["자금팀_정산집계표"]
                 
-                # [요청 1 & 3 반영]: F열과 G열(인덱스 기준 6번째, 7번째 컬럼 및 F1, G1 헤더 포함) 하늘색 배경 적용
                 fill_sky_blue = PatternFill(start_color="D9E1F2", end_color="D9E1F2", fill_type="solid")
-                fill_fg_mild = PatternFill(start_color="F0F4F8", end_color="F0F4F8", fill_type="solid")
                 font_mild = Font(name="맑은 고딕", size=10, bold=False, color="333333")
                 
                 fill_fg_strong = PatternFill(start_color="1F4E78", end_color="1F4E78", fill_type="solid")
                 font_strong = Font(name="맑은 고딕", size=10, bold=True, color="FFFFFF")
                 
-                # [요청 2 반영]: 테두리 세팅 설정 (1행 굵은 바깥쪽, 2행 이하 안쪽 점선 가로 및 실선 세로)
                 thick_side = Side(style='medium', color='000000')
                 thin_side = Side(style='thin', color='000000')
                 dashed_side = Side(style='dashed', color='000000')
@@ -1203,13 +1198,17 @@ with tab2:
                     for col_idx in range(1, max_col + 1):
                         cell = worksheet.cell(row=row_idx, column=col_idx)
                         
-                        # [요청 1 & 3]: F열(6)과 G열(7) 배경색 일괄 적용 (헤더 F1, G1 포함)
                         if col_idx in [6, 7]:
                             cell.fill = fill_sky_blue
 
-                        # [요청 2]: 테두리 적용 로직
-                        top_b = thick_side if row_idx == 1 else dashed_side
-                        bottom_b = thick_side if row_idx == max_row else dashed_side
+                        # [요청 1 반영]: 1행의 아래쪽 테두리는 항상 굵은 실선(medium)으로 설정
+                        if row_idx == 1:
+                            top_b = thick_side
+                            bottom_b = thick_side
+                        else:
+                            top_b = dashed_side
+                            bottom_b = thick_side if row_idx == max_row else dashed_side
+
                         left_b = thick_side if col_idx == 1 else thin_side
                         right_b = thick_side if col_idx == max_col else thin_side
                         
@@ -1258,6 +1257,7 @@ with tab2:
             )
 
         with col_down2:
+            # [요청 2 반영]: 자금팀 정산 집계표 전체 데이터프레임(A열~H열에 대응하는 fund_view_df)을 기반으로 이미지 생성
             img_buf = generate_table_image(fund_view_df)
             st.download_button(
                 label="🖼️ 자금팀 정산 집계표 이미지 다운로드 (PNG)",

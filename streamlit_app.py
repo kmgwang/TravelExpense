@@ -1272,7 +1272,7 @@ with tab3:
                 bottom=Side(style="thin", color="000000"),
             )
 
-            # 수정요청 3: A1:F1 셀병합
+            # A1:F1 셀병합
             ws.merge_cells("A1:F1")
             cell_t = ws["A1"]
             cell_t.value = "해외출장비 산정 내역서"
@@ -1282,7 +1282,6 @@ with tab3:
             for c_idx in range(1, 7):
                 ws.cell(row=1, column=c_idx).border = thin_border
 
-            # 2. 지역구분 값 ('급' 제거, 갑/을/병/특 만 표시)
             region_val = p_data.get("지역구분", "")
 
             info_rows = [
@@ -1356,7 +1355,7 @@ with tab3:
                 )
                 cell.border = thin_border
 
-            # 수정요청 2: E7과 F7 셀병합
+            # E7과 F7 셀병합
             ws.merge_cells("E7:F7")
             cell_e7 = ws.cell(row=7, column=5, value=headers_1[4])
             cell_e7.font = font_bold
@@ -1409,7 +1408,7 @@ with tab3:
                 if c_idx == 4 and isinstance(val, (int, float)):
                     cell.number_format = "#,##0"
 
-            # 수정요청 2: E8과 F8 셀병합
+            # E8과 F8 셀병합
             ws.merge_cells("E8:F8")
             cell_e8 = ws.cell(row=8, column=5, value=hotel_formula_text)
             cell_e8.border = thin_border
@@ -1437,7 +1436,7 @@ with tab3:
                 if c_idx == 4 and isinstance(val, (int, float)):
                     cell.number_format = "#,##0"
 
-            # 수정요청 2: E9과 F9 셀병합
+            # E9과 F9 셀병합
             ws.merge_cells("E9:F9")
             cell_e9 = ws.cell(row=9, column=5, value=daily_formula_text)
             cell_e9.border = thin_border
@@ -1461,7 +1460,6 @@ with tab3:
             ws.cell(row=10, column=2).border = thin_border
             ws.cell(row=10, column=3).border = thin_border
 
-            # 수정요청 1: 숙박비+일당의 값은 D10셀에 적용
             total_calc_amt = p_data.get("직원_계좌입금액", 0)
             ws.cell(row=10, column=4, value=total_calc_amt).font = font_bold
             ws.cell(row=10, column=4).alignment = Alignment(
@@ -1475,19 +1473,18 @@ with tab3:
             ws.cell(row=10, column=6).border = thin_border
             ws.row_dimensions[10].height = 22
 
+            # ----------------------------------------------------
+            # ■ 해외출장 지급규정 표 (요청하신 이미지 구조 반영)
+            # ----------------------------------------------------
             ws["A12"] = "■ 해외출장 지급규정"
             ws["A12"].font = font_bold
             ws.row_dimensions[12].height = 25
 
-            headers_2 = ["지역", "직급", "일당", "숙박", "비고"]
-            ws.cell(row=13, column=1, value=headers_2[0])
-            ws.cell(row=13, column=2, value=headers_2[1])
-            ws.cell(row=13, column=3, value=headers_2[2])
-            ws.cell(row=13, column=4, value=headers_2[3])
-            
-            # 수정요청 4: E13:F13 셀병합 (비고 영역) -> F13에 대한 직접 값 대입 제거
-            ws.merge_cells("E13:F13")
-            ws.cell(row=13, column=5, value=headers_2[4])
+            # 헤더 설정 (Row 13)
+            ws.cell(row=13, column=1, value="구분")
+            ws.cell(row=13, column=2, value="화폐")
+            ws.merge_cells("C13:F13")
+            ws.cell(row=13, column=3, value="지역구분")
 
             for c_idx in range(1, 7):
                 cell = ws.cell(row=13, column=c_idx)
@@ -1497,92 +1494,53 @@ with tab3:
                     horizontal="center", vertical="center"
                 )
                 cell.border = thin_border
+            # C13:F13 병합된 셀 테두리 정리
+            for c_idx in [3, 4, 5, 6]:
+                ws.cell(row=13, column=c_idx).border = thin_border
             ws.row_dimensions[13].height = 22
 
-            rules_data = [
-                (
-                    "갑",
-                    [
-                        ("임원(부사장이상)", "$135", "실비", ""),
-                        ("임원", "$90", "$130", ""),
-                        ("1급", "$70", "$100", ""),
-                        ("2급", "$65", "$95", ""),
-                        ("3급이하", "$60", "$90", ""),
-                    ],
-                ),
-                (
-                    "을",
-                    [
-                        ("임원(부사장이상)", "$130", "실비", ""),
-                        ("임원", "$85", "$125", ""),
-                        ("1급", "$65", "$95", ""),
-                        ("2급", "$60", "$90", ""),
-                        ("3급이하", "$55", "$85", ""),
-                    ],
-                ),
-                (
-                    "병",
-                    [
-                        ("임원(부사장이상)", "$130", "실비", ""),
-                        ("임원", "$80", "$110", ""),
-                        ("1급", "$60", "$90", ""),
-                        ("2급", "$55", "$85", ""),
-                        ("3급이하", "$55", "$80", ""),
-                    ],
-                ),
-                (
-                    "특",
-                    [
-                        ("임원(부사장이상)", "¥23,000", "실비", ""),
-                        ("임원", "¥11,000", "¥17,000", "엔화"),
-                        ("1급", "¥8,000", "¥12,000", "엔화"),
-                        ("2급", "¥7,000", "¥11,000", "엔화"),
-                        ("3급이하", "¥7,000", "¥10,000", "엔화"),
-                    ],
-                ),
+            # 규정 데이터 목록 (Row 14 ~ 17)
+            rules_image_data = [
+                ("갑", "US$(미국달러)", "유럽,미주,중동,아프리카,싱가포르,홍콩,대만,오세아니아,동유럽,러시아"),
+                ("을", "US$(미국달러)", "중국지역"),
+                ("병", "US$(미국달러)", "동/서남아시아 및 기타지역"),
+                ("특", "¥(엔화)", "일본"),
             ]
 
             curr_row = 14
-            for reg_name, pos_list in rules_data:
-                start_r = curr_row
-                for pos_name, d_val, h_val, note_val in pos_list:
-                    ws.cell(row=curr_row, column=2, value=pos_name)
-                    ws.cell(row=curr_row, column=3, value=d_val)
-                    ws.cell(row=curr_row, column=4, value=h_val)
-                    
-                    # 수정요청 4: 각 행의 E와 F셀 병합 -> F열 셀 직접 대입 제거
-                    ws.merge_cells(
-                        start_row=curr_row,
-                        start_column=5,
-                        end_row=curr_row,
-                        end_column=6,
-                    )
-                    ws.cell(row=curr_row, column=5, value=note_val)
+            for reg_code, currency_str, region_desc in rules_image_data:
+                ws.row_dimensions[curr_row].height = 22
+                ws.cell(row=curr_row, column=1, value=reg_code)
+                ws.cell(row=curr_row, column=2, value=currency_str)
 
-                    for c_idx in range(1, 7):
-                        cell = ws.cell(row=curr_row, column=c_idx)
-                        cell.border = thin_border
-                        cell.font = font_normal
+                # C열~F열 병합하여 지역 설명 입력
+                ws.merge_cells(
+                    start_row=curr_row,
+                    start_column=3,
+                    end_row=curr_row,
+                    end_column=6,
+                )
+                ws.cell(row=curr_row, column=3, value=region_desc)
+
+                for c_idx in range(1, 7):
+                    cell = ws.cell(row=curr_row, column=c_idx)
+                    cell.border = thin_border
+                    cell.font = font_normal
+                    if c_idx in [1, 2]:
                         cell.alignment = Alignment(
                             horizontal="center", vertical="center"
                         )
-                    ws.row_dimensions[curr_row].height = 20
-                    curr_row += 1
+                    else:
+                        cell.alignment = Alignment(
+                            horizontal="left", vertical="center"
+                        )
+                # 병합된 C~F열 테두리 일괄 적용
+                for c_idx in [3, 4, 5, 6]:
+                    ws.cell(row=curr_row, column=c_idx).border = thin_border
 
-                end_r = curr_row - 1
-                if start_r != end_r:
-                    ws.merge_cells(
-                        start_row=start_r,
-                        start_column=1,
-                        end_row=end_r,
-                        end_column=1,
-                    )
-                ws.cell(row=start_r, column=1, value=reg_name)
-                ws.cell(row=start_r, column=1).alignment = Alignment(
-                    horizontal="center", vertical="center"
-                )
-                ws.cell(row=start_r, column=1).font = font_bold
+                curr_row += 1
 
+            # 하단 푸터 영역
             footer_row_1 = curr_row + 1
             ws.merge_cells(
                 start_row=footer_row_1,
@@ -1625,12 +1583,12 @@ with tab3:
                 ws.cell(row=footer_row_2, column=c_idx).border = thin_border
 
             col_widths = {
-                "A": 16,
+                "A": 10,
                 "B": 18,
-                "C": 14,
-                "D": 16,
-                "E": 20,
-                "F": 20,
+                "C": 18,
+                "D": 18,
+                "E": 18,
+                "F": 18,
             }
             for col_letter, width in col_widths.items():
                 ws.column_dimensions[col_letter].width = width

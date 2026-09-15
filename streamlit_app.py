@@ -1208,10 +1208,8 @@ with tab2:
         )
 
 with tab3:
-    st.header("📄 출장자용 해외출장비 산정 내역서 생성")
-    st.markdown(
-        "규정 기준, 환율 적용 방식, 백원 단위 절사 내역이 상세히 포함된 개인별 산정 내역서입니다."
-    )
+    st.header("📄 해외출장비 산정 내역서 생성")
+   
 
     if len(st.session_state.travel_list) > 0:
         processed_df = process_travel_data(st.session_state.travel_list)

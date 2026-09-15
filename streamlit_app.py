@@ -10,7 +10,6 @@ import openpyxl
 from openpyxl.styles import Alignment, PatternFill, Font, Border, Side
 from openpyxl.utils import get_column_letter
 import requests
-from bs4ポーツ import BeautifulSoup  # BeautifulSoup 추가 (아래 코드는 올바른 임포트 반영)
 
 # 크롤링 라이브러리 안전 임포트
 try:
@@ -109,7 +108,6 @@ def fetch_today_exchange_rates():
         
         if response.status_code == 200:
             soup = BeautifulSoup(response.text, "html.parser")
-            # 테이블 구조 파싱 (미국 달러, 일본 엔 검색)
             for tr in soup.find_all("tr"):
                 text = tr.get_text()
                 if "미국" in text and "달러" in text:
@@ -118,7 +116,7 @@ def fetch_today_exchange_rates():
                         val_str = c.get_text().strip().replace(",", "")
                         try:
                             val = float(val_str)
-                            if val > 500:  # 환율 수치 필터링
+                            if val > 500:
                                 rates["USD"] = val
                                 break
                         except ValueError:
@@ -129,7 +127,7 @@ def fetch_today_exchange_rates():
                         val_str = c.get_text().strip().replace(",", "")
                         try:
                             val = float(val_str)
-                            if 100 < val < 5000:  # 엔화(100엔 기준) 수치 필터링
+                            if 100 < val < 5000:
                                 rates["JPY"] = val
                                 break
                         except ValueError:
@@ -322,7 +320,6 @@ with tab1:
             f"✏️ 현재 **[인덱스 {st.session_state.edit_target_index}]** 번 출장 내역 수정 중입니다. 수정 후 아래 버튼을 누르면 내용이 갱신됩니다."
         )
 
-    # 실시간 사이트 환율 불러오기 연동
     fetched_rates = fetch_today_exchange_rates()
 
     col_rate_info, col_rate_btn, col_rate_input = st.columns([1.5, 1, 1.5])

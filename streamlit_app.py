@@ -6,6 +6,7 @@ import pandas as pd
 from st_aggrid import AgGrid, GridOptionsBuilder, GridUpdateMode
 import streamlit as st
 import platform
+from openpyxl.styles import Alignment
 
 if platform.system() == "Windows":
     matplotlib.rc("font", family="Malgun Gothic")
@@ -980,7 +981,6 @@ with tab1:
             ]
         ).reset_index(drop=True).copy()
         
-        # 순번 열 추가 (1부터 시작)
         display_df.insert(0, "순번", range(1, len(display_df) + 1))
 
         if "출장박수" in display_df.columns:
@@ -1117,7 +1117,6 @@ with tab2:
             ]
         ].copy()
         
-        # 화면 표에도 순번 삽입
         fund_view_df.insert(0, "순번", range(1, len(fund_view_df) + 1))
 
         fund_view_df.columns = [
@@ -1149,7 +1148,6 @@ with tab2:
                     "기타항목리스트",
                 ]
             )
-            # 엑셀 다운로드용 데이터프레임에도 맨 왼쪽에 순번 컬럼 삽입
             excel_save_df.insert(0, "순번", range(1, len(excel_save_df) + 1))
 
             with pd.ExcelWriter(output_agency, engine="openpyxl") as writer:
@@ -1159,12 +1157,24 @@ with tab2:
                 
                 worksheet = writer.sheets["자금팀_정산집계표"]
                 
-                # 금액 관련 열 천단위 콤마 서식 적용 (컬럼명에 '금액', '지급액', '총출장비' 포함 시)
-                for row_idx in range(2, len(excel_save_df) + 2):
+                # 정렬 및 서식 지정 로직 반영
+                for row_idx in range(1, len(excel_save_df) + 2):
                     for col_idx in range(1, len(excel_save_df.columns) + 1):
+                        cell = worksheet.cell(row=row_idx, column=col_idx)
+                        
+                        # A~I열 (1~9열): 전체 가운데 정렬
+                        if col_idx <= 9:
+                            cell.alignment = Alignment(horizontal='center', vertical='center')
+                        else:
+                            # J열 이상 (금액/합계 열 등): 1행은 가운데 정렬, 2행부터 오른쪽 정렬
+                            if row_idx == 1:
+                                cell.alignment = Alignment(horizontal='center', vertical='center')
+                            else:
+                                cell.alignment = Alignment(horizontal='right', vertical='center')
+                        
+                        # 금액 관련 열 천단위 콤마 서식 적용
                         col_name = excel_save_df.columns[col_idx - 1]
                         if any(k in col_name for k in ["금액", "지급액", "총출장비"]):
-                            cell = worksheet.cell(row=row_idx, column=col_idx)
                             cell.number_format = '#,##0'
                 
                 # 모든 열 너비 자동 조절 (내용 잘림 방지 및 여유 공간 부여)

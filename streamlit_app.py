@@ -8,19 +8,21 @@ import streamlit as st
 import platform
 from openpyxl.styles import Alignment, PatternFill, Font, Border, Side
 import matplotlib.pyplot as plt
-from matplotlib import font_manager, rc
-import platform
+import matplotlib.font_manager as fm
+import os
 
-# 운영체제별 폰트 설정
-if platform.system() == 'Windows':
-    rc('font', family='Malgun Gothic')
-elif platform.system() == 'Darwin': # Mac
-    rc('font', family='AppleGothic')
-else: # Linux (Streamlit Cloud 등 서버 환경)
-    # 리눅스 환경에 나눔고딕이 설치되어 있어야 함
-    rc('font', family='NanumGothic')
+# Matplotlib 캐시 디렉토리 내 fontlist 파일 삭제 후 재생성
+cache_dir = fm.get_cachedir()
+for file in os.listdir(cache_dir):
+    if 'fontlist' in file:
+        try:
+            os.remove(os.path.join(cache_dir, file))
+        except:
+            pass
 
-# 마이너스 부호 깨짐 방지
+# 나눔고딕 또는 맑은 고딕 설정 예시
+plt.rc('font', family='Malgun Gothic') # 윈도우인 경우
+# plt.rc('font', family='NanumGothic') # 리눅스인 경우
 plt.rcParams['axes.unicode_minus'] = False
 
 if platform.system() == "Windows":

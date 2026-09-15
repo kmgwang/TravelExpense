@@ -468,7 +468,6 @@ with tab1:
         )
         position = st.selectbox("직급", position_list, index=pos_idx)
 
-        # 직급 변경 시 자동으로 직급 구분 계산 (수정 모드에서도 실시간 연동)
         auto_pos_group = get_position_group(position)
         pos_group_options = [
             "임원(부사장이상)",
@@ -478,7 +477,6 @@ with tab1:
             "3급이하",
         ]
         
-        # 최초 로드 시 또는 직급이 변경되었을 때 자동 반영
         if target_edit_data and "loaded_edit_idx" not in st.session_state:
             default_pos_group = target_edit_data.get("직급구분", auto_pos_group)
         else:
@@ -511,7 +509,6 @@ with tab1:
         default_country = target_edit_data["출장지"] if target_edit_data else ""
         country = st.text_input("출장지", value=default_country)
 
-        # 출장지(국가) 변경 시 자동으로 지역 구분 계산 (수정 모드에서도 실시간 연동)
         auto_region = get_region_group(country) if country else "갑"
         region_options = ["갑", "을", "병", "특"]
         
@@ -687,12 +684,12 @@ with tab1:
         st.markdown("")
     with sc2:
         st.markdown(
-            "<div class='row-highlight-yellow' style='text-align: right;'><b>교통비 총계</b></div>",
+            "<div class='row-highlight-yellow' style='text-align: center;'><b>교통비 총계</b></div>",
             unsafe_allow_html=True,
         )
     with sc3:
         st.markdown(
-            f"<div class='row-highlight-yellow' style='text-align: right;'><b>{transport_sum:,.0f} 원</b></div>",
+            f"<div class='row-highlight-yellow' style='text-align: center;'><b>{transport_sum:,.0f} 원</b></div>",
             unsafe_allow_html=True,
         )
     with sc4:
@@ -765,12 +762,12 @@ with tab1:
         st.markdown("")
     with tc2:
         st.markdown(
-            "<div class='row-highlight-yellow' style='text-align: right;'><b>출장비 총계</b></div>",
+            "<div class='row-highlight-yellow' style='text-align: center;'><b>출장비 총계</b></div>",
             unsafe_allow_html=True,
         )
     with tc3:
         st.markdown(
-            f"<div class='row-highlight-yellow' style='text-align: right;'><b>{travel_exp_sum:,.0f} 원</b></div>",
+            f"<div class='row-highlight-yellow' style='text-align: center;'><b>{travel_exp_sum:,.0f} 원</b></div>",
             unsafe_allow_html=True,
         )
     with tc4:
@@ -861,12 +858,12 @@ with tab1:
         st.markdown("")
     with oc2:
         st.markdown(
-            "<div class='row-highlight-yellow' style='text-align: right;'><b>기타 총계</b></div>",
+            "<div class='row-highlight-yellow' style='text-align: center;'><b>기타 총계</b></div>",
             unsafe_allow_html=True,
         )
     with oc3:
         st.markdown(
-            f"<div class='row-highlight-yellow' style='text-align: right;'><b>{other_sum:,.0f} 원</b></div>",
+            f"<div class='row-highlight-yellow' style='text-align: center;'><b>{other_sum:,.0f} 원</b></div>",
             unsafe_allow_html=True,
         )
     with oc4:
@@ -905,12 +902,12 @@ with tab1:
         st.markdown("")
     with tot_c2:
         st.markdown(
-            "<div class='row-highlight-blue' style='text-align: right;'><span style='font-size: 1.1em;'><b>총액 (직원지급 + 여행사지급)</b></span></div>",
+            "<div class='row-highlight-blue' style='text-align: center;'><span style='font-size: 1.1em;'><b>총액</b></span></div>",
             unsafe_allow_html=True,
         )
     with tot_c3:
         st.markdown(
-            f"<div class='row-highlight-blue' style='text-align: right;'><span style='font-size: 1.1em; color: #000000;'><b>{grand_total:,.0f} 원</b></span></div>",
+            f"<div class='row-highlight-blue' style='text-align: center;'><span style='font-size: 1.1em; color: #000000;'><b>{grand_total:,.0f} 원</b></span></div>",
             unsafe_allow_html=True,
         )
     with tot_c4:
@@ -1051,7 +1048,6 @@ with tab1:
 
             if selected_idx is not None and st.session_state.edit_target_index is None:
                 st.session_state.edit_target_index = selected_idx
-                # 기존 로드 인덱스 초기화하여 수정 모드 진입 시 직급/국가 자동 계산 로직이 다시 작동하도록 함
                 if "loaded_edit_idx" in st.session_state:
                     del st.session_state["loaded_edit_idx"]
                 st.success(
@@ -1232,7 +1228,7 @@ with tab3:
         output_person.seek(0)
 
         st.download_button(
-            label=f"📥 [{selected_person}] 출장자용 산정 내역서 엑셀 다운로드",
+            label=`📥 [{selected_person}] 출장자용 산정 내역서 엑셀 다운로드`,
             data=output_person,
             file_name=f"화천기공_해외출장산정내역서_{selected_person}.xlsx",
             mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",

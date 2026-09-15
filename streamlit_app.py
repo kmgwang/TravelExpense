@@ -1251,8 +1251,8 @@ with tab3:
             ws = wb.active
             ws.title = "산정내역서"
 
-            # 1. 인쇄 영역 설정 (A1:F36)
-            ws.page_setup.printArea = "A1:F36"
+            # 인쇄 영역 설정 (A1:F33)
+            ws.page_setup.printArea = "A1:F33"
             ws.page_setup.orientation = ws.ORIENTATION_PORTRAIT
             ws.page_setup.paperSize = ws.PAPERSIZE_A4
 
@@ -1367,14 +1367,14 @@ with tab3:
 
             pos_group = p_data.get("직급구분", "3급이하")
             std_daily, std_hotel = get_standard_rates(region_val, pos_group)
-            curr_symbol = "¥" if region_val == "특" else "USD"
+            curr_symbol = "¥" if region_val == "특" else "$"
 
             hotel_str = (
                 "실비"
                 if std_hotel == "실비"
-                else f"{std_hotel}{curr_symbol} / 박"
+                else f"{curr_symbol}{std_hotel} / 박"
             )
-            daily_str = f"{std_daily}{curr_symbol} / 일"
+            daily_str = f"{curr_symbol}{std_daily} / 일"
 
             n_nights = p_data.get("출장박수", 0)
             n_days = p_data.get("출장일수", 0)
@@ -1474,17 +1474,19 @@ with tab3:
             ws.row_dimensions[10].height = 22
 
             # ----------------------------------------------------
-            # ■ 해외출장 지급규정 표 (요청하신 이미지 구조 반영)
+            # ■ 해외출장 지급규정 표 (A13:F33 이미지 구조 반영)
             # ----------------------------------------------------
             ws["A12"] = "■ 해외출장 지급규정"
             ws["A12"].font = font_bold
             ws.row_dimensions[12].height = 25
 
             # 헤더 설정 (Row 13)
-            ws.cell(row=13, column=1, value="구분")
-            ws.cell(row=13, column=2, value="화폐")
-            ws.merge_cells("C13:F13")
-            ws.cell(row=13, column=3, value="지역구분")
+            ws.merge_cells("A13:B13")
+            ws.cell(row=13, column=1, value="지역")
+            ws.cell(row=13, column=3, value="직급")
+            ws.cell(row=13, column=4, value="일당")
+            ws.cell(row=13, column=5, value="숙박")
+            ws.cell(row=13, column=6, value="비고")
 
             for c_idx in range(1, 7):
                 cell = ws.cell(row=13, column=c_idx)
@@ -1494,101 +1496,102 @@ with tab3:
                     horizontal="center", vertical="center"
                 )
                 cell.border = thin_border
-            # C13:F13 병합된 셀 테두리 정리
-            for c_idx in [3, 4, 5, 6]:
-                ws.cell(row=13, column=c_idx).border = thin_border
-            ws.row_dimensions[13].height = 22
+            ws.cell(row=13, column=2).border = thin_border
+            ws.row_dimensions[13].height = 25
 
-            # 규정 데이터 목록 (Row 14 ~ 17)
-            rules_image_data = [
-                ("갑", "US$(미국달러)", "유럽,미주,중동,아프리카,싱가포르,홍콩,대만,오세아니아,동유럽,러시아"),
-                ("을", "US$(미국달러)", "중국지역"),
-                ("병", "US$(미국달러)", "동/서남아시아 및 기타지역"),
-                ("특", "¥(엔화)", "일본"),
+            # 규정 데이터 블록 구성 (각 지역별 5개 행씩, 총 20행: 14 ~ 33)
+            regions_config = [
+                (
+                    "갑\n(유럽, 미주, 중동, 아프리카, 싱가포르,\n홍콩, 대만, 오세아니아, 동유럽,\n러시아)",
+                    [
+                        ("임원(부사장이상)", "$135", "실비", ""),
+                        ("임원", "$90", "$130", ""),
+                        ("1급", "$70", "$100", ""),
+                        ("2급", "$65", "$95", ""),
+                        ("3급이하", "$60", "$90", ""),
+                    ],
+                ),
+                (
+                    "을\n(중국 지역)",
+                    [
+                        ("임원(부사장이상)", "$130", "실비", ""),
+                        ("임원", "$85", "$125", ""),
+                        ("1급", "$65", "$95", ""),
+                        ("2급", "$60", "$90", ""),
+                        ("3급이하", "$55", "$85", ""),
+                    ],
+                ),
+                (
+                    "병\n(동남아시아, 서남아시아\n및 기타지역)",
+                    [
+                        ("임원(부사장이상)", "$130", "실비", ""),
+                        ("임원", "$80", "$110", ""),
+                        ("1급", "$60", "$90", ""),
+                        ("2급", "$55", "$85", ""),
+                        ("3급이하", "$55", "$80", ""),
+                    ],
+                ),
+                (
+                    "특\n(일본 지역)",
+                    [
+                        ("임원(부사장이상)", "¥23,000", "실비", ""),
+                        ("임원", "¥11,000", "¥17,000", "엔화"),
+                        ("1급", "¥8,000", "¥12,000", "엔화"),
+                        ("2급", "¥7,000", "¥11,000", "엔화"),
+                        ("3급이하", "¥7,000", "¥10,000", "엔화"),
+                    ],
+                ),
             ]
 
-            curr_row = 14
-            for reg_code, currency_str, region_desc in rules_image_data:
-                ws.row_dimensions[curr_row].height = 22
-                ws.cell(row=curr_row, column=1, value=reg_code)
-                ws.cell(row=curr_row, column=2, value=currency_str)
+            current_row = 14
+            for region_text, rows_data in regions_config:
+                start_r = current_row
+                end_r = current_row + len(rows_data) - 1
 
-                # C열~F열 병합하여 지역 설명 입력
+                # A~B열 지역명 병합
                 ws.merge_cells(
-                    start_row=curr_row,
-                    start_column=3,
-                    end_row=curr_row,
-                    end_column=6,
+                    start_row=start_r,
+                    start_column=1,
+                    end_row=end_r,
+                    end_column=2,
                 )
-                ws.cell(row=curr_row, column=3, value=region_desc)
+                ws.cell(row=start_r, column=1, value=region_text)
 
-                for c_idx in range(1, 7):
-                    cell = ws.cell(row=curr_row, column=c_idx)
-                    cell.border = thin_border
-                    cell.font = font_normal
-                    if c_idx in [1, 2]:
-                        cell.alignment = Alignment(
-                            horizontal="center", vertical="center"
-                        )
-                    else:
-                        cell.alignment = Alignment(
-                            horizontal="left", vertical="center"
-                        )
-                # 병합된 C~F열 테두리 일괄 적용
-                for c_idx in [3, 4, 5, 6]:
-                    ws.cell(row=curr_row, column=c_idx).border = thin_border
+                for r_offset, (pos_name, daily_val, hotel_val, note_val) in enumerate(
+                    rows_data
+                ):
+                    r_idx = start_r + r_offset
+                    ws.row_dimensions[r_idx].height = 22
 
-                curr_row += 1
+                    ws.cell(row=r_idx, column=3, value=pos_name)
+                    ws.cell(row=r_idx, column=4, value=daily_val)
+                    ws.cell(row=r_idx, column=5, value=hotel_val)
+                    ws.cell(row=r_idx, column=6, value=note_val)
 
-            # 하단 푸터 영역
-            footer_row_1 = curr_row + 1
-            ws.merge_cells(
-                start_row=footer_row_1,
-                start_column=1,
-                end_row=footer_row_1,
-                end_column=6,
-            )
-            f_cell1 = ws.cell(
-                row=footer_row_1,
-                column=1,
-                value="위와 같이 해외출장비를 정산 및 지급합니다.",
-            )
-            f_cell1.font = font_bold
-            f_cell1.alignment = Alignment(
-                horizontal="center", vertical="center"
-            )
-            ws.row_dimensions[footer_row_1].height = 25
-            for c_idx in range(1, 7):
-                ws.cell(row=footer_row_1, column=c_idx).border = thin_border
+                    for c_idx in range(1, 7):
+                        cell = ws.cell(row=r_idx, column=c_idx)
+                        cell.border = thin_border
+                        cell.font = font_normal
+                        if c_idx in [1, 2]:
+                            cell.alignment = Alignment(
+                                horizontal="center",
+                                vertical="center",
+                                wrap_text=True,
+                            )
+                        else:
+                            cell.alignment = Alignment(
+                                horizontal="center", vertical="center"
+                            )
 
-            footer_row_2 = footer_row_1 + 1
-            today_str = datetime.date.today().strftime("%Y년 %m월 %d일")
-            ws.merge_cells(
-                start_row=footer_row_2,
-                start_column=1,
-                end_row=footer_row_2,
-                end_column=6,
-            )
-            f_cell2 = ws.cell(
-                row=footer_row_2,
-                column=1,
-                value=f"신청일 : {today_str}",
-            )
-            f_cell2.font = font_normal
-            f_cell2.alignment = Alignment(
-                horizontal="center", vertical="center"
-            )
-            ws.row_dimensions[footer_row_2].height = 22
-            for c_idx in range(1, 7):
-                ws.cell(row=footer_row_2, column=c_idx).border = thin_border
+                current_row = end_r + 1
 
             col_widths = {
-                "A": 10,
+                "A": 16,
                 "B": 18,
                 "C": 18,
-                "D": 18,
-                "E": 18,
-                "F": 18,
+                "D": 14,
+                "E": 14,
+                "F": 12,
             }
             for col_letter, width in col_widths.items():
                 ws.column_dimensions[col_letter].width = width

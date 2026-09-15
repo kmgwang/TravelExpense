@@ -6,6 +6,7 @@ import pandas as pd
 from st_aggrid import AgGrid, GridOptionsBuilder, GridUpdateMode
 import streamlit as st
 import platform
+import openpyxl
 from openpyxl.styles import Alignment, PatternFill, Font, Border, Side
 from openpyxl.utils import get_column_letter
 
@@ -1245,13 +1246,11 @@ with tab3:
             """
             )
 
-        # 이미지 양식과 일치하는 엑셀 생성 함수
         def generate_exact_statement_excel(p_data):
             wb = openpyxl.Workbook()
             ws = wb.active
             ws.title = "산정내역서"
 
-            # 눈금선 표시 설정
             ws.views.sheetView[0].showGridLines = True
 
             font_title = Font(name="맑은 고딕", size=16, bold=True)
@@ -1261,13 +1260,6 @@ with tab3:
             fill_gray_header = PatternFill(
                 start_color="D9D9D9", end_color="D9D9D9", fill_type="solid"
             )
-            fill_black_header = PatternFill(
-                start_color="262626", end_color="262626", fill_type="solid"
-            )
-            font_white_bold = Font(
-                name="맑은 고딕", size=11, bold=True, color="FFFFFF"
-            )
-
             thin_border = Border(
                 left=Side(style="thin", color="000000"),
                 right=Side(style="thin", color="000000"),
@@ -1275,7 +1267,6 @@ with tab3:
                 bottom=Side(style="thin", color="000000"),
             )
 
-            # 1. 타이틀
             ws.merge_cells("A1:E1")
             cell_t = ws["A1"]
             cell_t.value = "해외출장비 산정 내역서"
@@ -1283,7 +1274,6 @@ with tab3:
             cell_t.alignment = Alignment(horizontal="center", vertical="center")
             ws.row_dimensions[1].height = 40
 
-            # 2. 개인정보 상단 요약 테이블 (2~4행)
             info_rows = [
                 [
                     "소속",
@@ -1311,10 +1301,8 @@ with tab3:
                 ],
             ]
 
-            # 엑셀 열 레이아웃 (A, B, C, D, E, F) 에 맞추어 매핑
             for r_idx, r_data in enumerate(info_rows, start=3):
                 ws.row_dimensions[r_idx].height = 22
-                # r_data: [라벨1, 값1, 라벨2, 값2, 라벨3, 값3]
                 ws.cell(row=r_idx, column=1, value=r_data[0])
                 ws.cell(row=r_idx, column=2, value=r_data[1])
                 ws.cell(row=r_idx, column=3, value=r_data[2])
@@ -1337,12 +1325,10 @@ with tab3:
                             horizontal="center", vertical="center"
                         )
 
-            # 3. 적용 출장비 산정 기준 섹션 제목
             ws["A6"] = "■ 적용 출장비 산정 기준"
             ws["A6"].font = font_bold
             ws.row_dimensions[6].height = 25
 
-            # 산정 기준 테이블 헤더 (7행)
             headers_1 = [
                 "구분",
                 "산정 기준",
@@ -1375,7 +1361,6 @@ with tab3:
             n_nights = p_data.get("출장박수", 0)
             n_days = p_data.get("출장일수", 0)
 
-            # 숙박비 행 (8행)
             hotel_formula = (
                 "실비"
                 if std_hotel == "실비"
@@ -1400,7 +1385,6 @@ with tab3:
                 )
             ws.row_dimensions[8].height = 22
 
-            # 일당 행 (9행)
             daily_formula = f"{std_daily} * {n_days}일 * 환율"
             daily_calc_text = f"{std_daily} USD * m일 x 환율"
             row_daily = [
@@ -1419,7 +1403,6 @@ with tab3:
                 )
             ws.row_dimensions[9].height = 22
 
-            # 지급 총액 행 (10행)
             ws.cell(row=10, column=1, value="지급 총액").font = font_bold
             ws.cell(row=10, column=1).fill = fill_gray_header
             ws.cell(row=10, column=1).alignment = Alignment(
@@ -1449,12 +1432,10 @@ with tab3:
             ws.cell(row=10, column=6, value="").border = thin_border
             ws.row_dimensions[10].height = 22
 
-            # 4. 해외출장 지급규정 섹션 제목
             ws["A12"] = "■ 해외출장 지급규정"
             ws["A12"].font = font_bold
             ws.row_dimensions[12].height = 25
 
-            # 지급규정 테이블 헤더 (13행)
             headers_2 = ["지역", "직급", "일당", "숙박", "비고"]
             ws.merge_cells("D13:E13")
             ws.cell(row=13, column=1, value=headers_2[0])
@@ -1473,7 +1454,6 @@ with tab3:
                 cell.border = thin_border
             ws.row_dimensions[13].height = 22
 
-            # 규정 데이터 목록
             rules_data = [
                 (
                     "갑",
@@ -1556,7 +1536,6 @@ with tab3:
                 )
                 ws.cell(row=start_r, column=1).font = font_bold
 
-            # 5. 푸터 문구
             footer_row_1 = curr_row + 1
             ws.merge_cells(
                 start_row=footer_row_1,
@@ -1594,7 +1573,6 @@ with tab3:
             )
             ws.row_dimensions[footer_row_2].height = 22
 
-            # 열 너비 자동 맞춤
             col_widths = {
                 "A": 16,
                 "B": 18,

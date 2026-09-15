@@ -292,7 +292,7 @@ def generate_table_image(df):
             or col in ["출장박수", "출장일수", "순번"]
         ):
             formatted_df[col] = formatted_df[col].apply(
-                lambda x: f"{int(x):,}" if pd.notnull(x) and str(x).replace('.','',1).isdigit() else str(x)
+                lambda x: f"{int(x):,}" if pd.notnull(x) and str(x).replace('.', '', 1).isdigit() else str(x)
             )
 
     table = ax.table(
@@ -1201,7 +1201,6 @@ with tab2:
                         if col_idx in [6, 7]:
                             cell.fill = fill_sky_blue
 
-                        # [요청 1 반영]: 1행의 아래쪽 테두리는 항상 굵은 실선(medium)으로 설정
                         if row_idx == 1:
                             top_b = thick_side
                             bottom_b = thick_side
@@ -1257,7 +1256,7 @@ with tab2:
             )
 
         with col_down2:
-            # [요청 2 반영]: 자금팀 정산 집계표 전체 데이터프레임(A열~H열에 대응하는 fund_view_df)을 기반으로 이미지 생성
+            # A1부터 H열 마지막 값까지 반영된 fund_view_df를 기반으로 이미지 다운로드 생성
             img_buf = generate_table_image(fund_view_df)
             st.download_button(
                 label="🖼️ 자금팀 정산 집계표 이미지 다운로드 (PNG)",

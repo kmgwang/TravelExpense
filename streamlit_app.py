@@ -287,10 +287,10 @@ def generate_table_image(df):
             "금액" in col
             or "합계" in col
             or "지급액" in col
-            or col in ["출장박수", "출장일수"]
+            or col in ["출장박수", "출장일수", "순번"]
         ):
             formatted_df[col] = formatted_df[col].apply(
-                lambda x: f"{int(x):,}" if pd.notnull(x) else "0"
+                lambda x: f"{int(x):,}" if pd.notnull(x) and str(x).replace('.','',1).isdigit() else str(x)
             )
 
     table = ax.table(
@@ -979,6 +979,9 @@ with tab1:
                 "환율",
             ]
         ).reset_index(drop=True).copy()
+        
+        # 순번 열 추가 (1부터 시작)
+        display_df.insert(0, "순번", range(1, len(display_df) + 1))
 
         if "출장박수" in display_df.columns:
             display_df["출장박수"] = display_df["출장박수"].apply(
@@ -1113,7 +1116,12 @@ with tab2:
                 "총출장비",
             ]
         ].copy()
+        
+        # 화면 표에도 순번 삽입
+        fund_view_df.insert(0, "순번", range(1, len(fund_view_df) + 1))
+
         fund_view_df.columns = [
+            "순번",
             "성명",
             "부서",
             "직급",
@@ -1141,6 +1149,9 @@ with tab2:
                     "기타항목리스트",
                 ]
             )
+            # 엑셀 다운로드용 데이터프레임에도 맨 왼쪽에 순번 컬럼 삽입
+            excel_save_df.insert(0, "순번", range(1, len(excel_save_df) + 1))
+
             with pd.ExcelWriter(output_agency, engine="openpyxl") as writer:
                 excel_save_df.to_excel(
                     writer, index=False, sheet_name="자금팀_정산집계표"
@@ -1148,7 +1159,7 @@ with tab2:
                 
                 worksheet = writer.sheets["자금팀_정산집계표"]
                 
-                # 금액 관련 열 천단위 콤마 서식 적용 (직원_계좌입금액, 여행사_지급액, 총출장비 열 인덱스 자동 대응)
+                # 금액 관련 열 천단위 콤마 서식 적용 (컬럼명에 '금액', '지급액', '총출장비' 포함 시)
                 for row_idx in range(2, len(excel_save_df) + 2):
                     for col_idx in range(1, len(excel_save_df.columns) + 1):
                         col_name = excel_save_df.columns[col_idx - 1]
@@ -1246,7 +1257,7 @@ with tab3:
             label=f"📥 [{selected_person}] 출장자용 산정 내역서 엑셀 다운로드",
             data=output_person,
             file_name=f"화천기공_해외출장산정내역서_{selected_person}.xlsx",
-            mime="application/vnd.openpyxl.spreadsheetml.sheet",
+            mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
         )
     else:
         st.warning(

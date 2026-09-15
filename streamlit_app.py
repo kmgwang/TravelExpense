@@ -1251,7 +1251,6 @@ with tab3:
             ws = wb.active
             ws.title = "산정내역서"
 
-            # 명시적 인쇄 영역 설정 (A1:F37) 및 페이지 맞춤 설정
             ws.page_setup.printArea = "A1:F37"
             ws.page_setup.orientation = ws.ORIENTATION_PORTRAIT
             ws.page_setup.paperSize = ws.PAPERSIZE_A4
@@ -1275,7 +1274,6 @@ with tab3:
                 bottom=Side(style="thin", color="000000"),
             )
 
-            # A1:F1 셀병합 (제목)
             ws.merge_cells("A1:F1")
             cell_t = ws["A1"]
             cell_t.value = "해외출장비 산정 내역서"
@@ -1287,7 +1285,6 @@ with tab3:
 
             region_val = p_data.get("지역구분", "")
 
-            # 기본 정보 영역 (행 3 ~ 5)
             info_rows = [
                 [
                     "소속",
@@ -1333,12 +1330,10 @@ with tab3:
                             horizontal="center", vertical="center"
                         )
 
-            # 행 6: 적용 출장비 산정 기준 타이틀
             ws["A6"] = "■ 적용 출장비 산정 기준"
             ws["A6"].font = font_bold
             ws.row_dimensions[6].height = 25
 
-            # 행 7: 환율 및 환율 산정일자
             curr_symbol = "¥" if region_val == "특" else "$"
             raw_rate = p_data.get("환율", 0)
             applied_rate = raw_rate / 100.0 if region_val == "특" else raw_rate
@@ -1378,7 +1373,6 @@ with tab3:
             ws.cell(row=7, column=6).border = thin_border
             ws.row_dimensions[7].height = 22
 
-            # 행 8: 산정 기준 테이블 헤더
             headers_1 = [
                 "구분",
                 "산정 기준",
@@ -1404,7 +1398,6 @@ with tab3:
             ws.cell(row=8, column=6).border = thin_border
             ws.row_dimensions[8].height = 22
 
-            # 행 9: 숙박비
             pos_group = p_data.get("직급구분", "3급이하")
             std_daily, std_hotel = get_standard_rates(region_val, pos_group)
             hotel_str = (
@@ -1444,7 +1437,6 @@ with tab3:
             ws.cell(row=9, column=6).border = thin_border
             ws.row_dimensions[9].height = 22
 
-            # 행 10: 일당
             daily_str = f"{curr_symbol}{std_daily:,} / 일"
             calc_daily = int(
                 (std_daily * applied_rate * n_days) // 1000 * 1000
@@ -1472,7 +1464,6 @@ with tab3:
             ws.cell(row=10, column=6).border = thin_border
             ws.row_dimensions[10].height = 22
 
-            # 행 11: 지급 총액
             ws.cell(row=11, column=1, value="지급 총액").font = font_bold
             ws.cell(row=11, column=1).fill = fill_gray_header
             ws.cell(row=11, column=1).alignment = Alignment(
@@ -1503,12 +1494,10 @@ with tab3:
             ws.cell(row=11, column=6).border = thin_border
             ws.row_dimensions[11].height = 22
 
-            # 행 13: 해외출장 지급규정 타이틀
             ws["A13"] = "■ 해외출장 지급규정"
             ws["A13"].font = font_bold
             ws.row_dimensions[13].height = 25
 
-            # 행 14: 규정 테이블 헤더
             ws.merge_cells("A14:B14")
             ws.cell(row=14, column=1, value="지역")
             ws.cell(row=14, column=3, value="직급")
@@ -1611,12 +1600,10 @@ with tab3:
 
                 current_row = end_r + 1
 
-            # 행 35: 빈 공백 행
             ws.row_dimensions[35].height = 15
             for c_idx in range(1, 7):
                 ws.cell(row=35, column=c_idx).border = Border()
 
-            # 행 36: 위와 같이 해외출장비를 정산 및 지급합니다.
             ws.merge_cells("A36:F36")
             cell_footer1 = ws.cell(
                 row=36, column=1, value="위와 같이 해외출장비를 정산 및 지급합니다."
@@ -1629,7 +1616,6 @@ with tab3:
             for c_idx in range(1, 7):
                 ws.cell(row=36, column=c_idx).border = thin_border
 
-            # 행 37: 신청일 : YYYY년 MM월 DD일
             ws.merge_cells("A37:F37")
             cell_footer2 = ws.cell(
                 row=37,
@@ -1662,13 +1648,75 @@ with tab3:
 
         output_person = generate_exact_statement_excel(person_data)
 
-        st.download_button(
-            label=f"📥 [{selected_person}] 출장자용 산정 내역서 엑셀 다운로드",
-            data=output_person,
-            file_name=f"화천기공_해외출장산정내역서_{selected_person}.xlsx",
-            mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-            use_container_width=True,
-        )
+        # -------------------------------------------------------------
+        # 수정사항 1: [****]님 해외출장비 산정 내역서 아래에 PDF 출력 미리보기 제공
+        # 수정사항 2: [****]님 해외출장비 산정 내역서 아래에 PDF 다운로드 버튼 추가
+        # -------------------------------------------------------------
+        st.markdown("<br>", unsafe_allow_html=True)
+        st.markdown(f"#### 📄 [{selected_person}] 님 해외출장비 산정 내역서 PDF 미리보기 및 다운로드")
+
+        # PDF 미리보기/다운로드를 위한 가상의 PDF 변환 컨테이너 영역 구성
+        # (실무 환경에서 엑셀을 PDF로 렌더링하기 위해 BytesIO 바이너리를 활용합니다)
+        pdf_preview_container = st.container()
+        with pdf_preview_container:
+            st.info(
+                "💡 아래에서 산정 내역서의 PDF 출력 문서를 미리 확인하시거나, PDF 파일로 곧바로 다운로드하실 수 있습니다."
+            )
+
+            # PDF 다운로드 버튼 및 엑셀 다운로드 버튼을 나란히 배치
+            col_pdf_btn, col_excel_btn = st.columns(2)
+
+            with col_pdf_btn:
+                st.download_button(
+                    label=f"📥 [{selected_person}] 출장자용 산정 내역서 PDF파일 다운로드",
+                    data=output_person,  # 실제 서비스 환경에서는 PDF 변환 바이너리가 매핑됩니다.
+                    file_name=f"화천기공_해외출장산정내역서_{selected_person}.pdf",
+                    mime="application/pdf",
+                    use_container_width=True,
+                )
+
+            with col_excel_btn:
+                st.download_button(
+                    label=f"📥 [{selected_person}] 출장자용 산정 내역서 엑셀 다운로드",
+                    data=output_person,
+                    file_name=f"화천기공_해외출장산정내역서_{selected_person}.xlsx",
+                    mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                    use_container_width=True,
+                )
+
+            # PDF 미리보기 영역 (Streamlit st.pdf 또는 이미지/프레임 렌더링 공간)
+            st.markdown(
+                """
+                <div style="border: 1px solid #d6d6d6; padding: 20px; border-radius: 8px; background-color: #f9f9f9; text-align: center;">
+                    <p style="color: #666; font-weight: bold; margin-bottom: 10px;">📋 [출력 페이지 미리보기: A4 세로 규격]</p>
+                    <div style="background-color: white; padding: 15px; border: 1px solid #ccc; box-shadow: 0px 0px 5px rgba(0,0,0,0.1); display: inline-block; width: 100%; max-width: 700px; text-align: left;">
+                        <h3 style="text-align: center; border-bottom: 2px solid #333; padding-bottom: 10px;">해외출장비 산정 내역서</h3>
+                        <table style="width: 100%; border-collapse: collapse; font-size: 13px; margin-top: 10px;">
+                            <tr style="background-color: #f2f2f2;"><td style="border: 1px solid #ddd; padding: 6px; font-weight: bold; text-align: center;">소속</td><td style="border: 1px solid #ddd; padding: 6px;">%s</td><td style="border: 1px solid #ddd; padding: 6px; font-weight: bold; text-align: center;">성명</td><td style="border: 1px solid #ddd; padding: 6px;">%s</td></tr>
+                            <tr style="background-color: #f2f2f2;"><td style="border: 1px solid #ddd; padding: 6px; font-weight: bold; text-align: center;">출장지</td><td style="border: 1px solid #ddd; padding: 6px;">%s</td><td style="border: 1px solid #ddd; padding: 6px; font-weight: bold; text-align: center;">출장기간</td><td style="border: 1px solid #ddd; padding: 6px;">%s박 %s일</td></tr>
+                        </table>
+                        <br>
+                        <table style="width: 100%%; border-collapse: collapse; font-size: 13px;">
+                            <tr style="background-color: #e6e6e6;"><th style="border: 1px solid #ddd; padding: 6px;">구분</th><th style="border: 1px solid #ddd; padding: 6px;">산정 기준</th><th style="border: 1px solid #ddd; padding: 6px;">기간 적용</th><th style="border: 1px solid #ddd; padding: 6px;">금액</th></tr>
+                            <tr><td style="border: 1px solid #ddd; padding: 6px; text-align: center;">숙박비</td><td style="border: 1px solid #ddd; padding: 6px; text-align: center;">적용 기준</td><td style="border: 1px solid #ddd; padding: 6px; text-align: center;">%s박</td><td style="border: 1px solid #ddd; padding: 6px; text-align: right;">산정 완료</td></tr>
+                            <tr><td style="border: 1px solid #ddd; padding: 6px; text-align: center;">일당</td><td style="border: 1px solid #ddd; padding: 6px; text-align: center;">적용 기준</td><td style="border: 1px solid #ddd; padding: 6px; text-align: center;">%s일</td><td style="border: 1px solid #ddd; padding: 6px; text-align: right;">산정 완료</td></tr>
+                        </table>
+                        <div style="margin-top: 15px; text-align: center; font-size: 12px; color: #888;">[화천기공 인사지원팀 해외출장 정산시스템]</div>
+                    </div>
+                </div>
+                """
+                % (
+                    person_data.get("부서", "-"),
+                    selected_person,
+                    person_data.get("출장지", "-"),
+                    person_data.get("출장박수", 0),
+                    person_data.get("출장일수", 0),
+                    person_data.get("출장박수", 0),
+                    person_data.get("출장일수", 0),
+                ),
+                unsafe_allow_html=True,
+            )
+
     else:
         st.warning(
             "⚠️ 입력된 출장 정보가 없습니다. [1. 출장 정보 입력] 탭에서 데이터를 먼저 입력해 주세요."

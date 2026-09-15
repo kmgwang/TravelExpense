@@ -1147,11 +1147,24 @@ with tab2:
                 )
                 
                 worksheet = writer.sheets["자금팀_정산집계표"]
+                
+                # 금액 관련 열(직원_계좌입금액, 여행사_지급액, 총출장비 등 L, M, N열 포함) 천단위 콤마 서식 적용
                 for row_idx in range(2, len(excel_save_df) + 2):
-                    cell_k = worksheet.cell(row=row_idx, column=11)
-                    cell_l = worksheet.cell(row=row_idx, column=12)
-                    cell_k.number_format = '#,##0'
-                    cell_l.number_format = '#,##0'
+                    for col_idx in [12, 13, 14]:
+                        cell = worksheet.cell(row=row_idx, column=col_idx)
+                        cell.number_format = '#,##0'
+                
+                # 모든 열 너비 자동 조절 (내용 잘림 방지 및 여유 공간 부여)
+                for col in worksheet.columns:
+                    max_length = 0
+                    col_letter = col[0].column_letter
+                    for cell in col:
+                        try:
+                            if cell.value:
+                                max_length = max(max_length, len(str(cell.value)))
+                        except:
+                            pass
+                    worksheet.column_dimensions[col_letter].width = max(max_length + 5, 13)
                     
             output_agency.seek(0)
 

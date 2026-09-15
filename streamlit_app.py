@@ -971,7 +971,7 @@ with tab1:
                 "지역구분",
                 "직급구분",
             ]
-        ).copy()
+        ).reset_index(drop=True).copy()
 
         if "환율" in display_df.columns:
             display_df["환율"] = display_df["환율"].apply(
@@ -1025,7 +1025,7 @@ with tab1:
 
         if selected_rows is not None:
             if isinstance(selected_rows, pd.DataFrame) and not selected_rows.empty:
-                selected_idx = selected_rows.index[0]
+                selected_idx = int(selected_rows.index[0])
             elif isinstance(selected_rows, list) and len(selected_rows) > 0:
                 sel_row_dict = selected_rows[0]
                 matched = display_df[
@@ -1034,14 +1034,14 @@ with tab1:
                     & (display_df["출장시작일"] == sel_row_dict.get("출장시작일"))
                 ]
                 if not matched.empty:
-                    selected_idx = matched.index[0]
+                    selected_idx = int(matched.index[0])
                 else:
                     selected_idx = None
             else:
                 selected_idx = None
 
             if selected_idx is not None and st.session_state.edit_target_index is None:
-                st.session_state.edit_target_index = int(selected_idx)
+                st.session_state.edit_target_index = selected_idx
                 st.success(
                     f"📌 [{display_df.iloc[selected_idx]['출장자성명']}] 님의 내역이 선택되었습니다. 위쪽 입력 폼에서 내용을 수정한 뒤 '수정 사항 반영하기' 버튼을 눌러주세요."
                 )
@@ -1138,7 +1138,6 @@ with tab2:
                     writer, index=False, sheet_name="자금팀_정산집계표"
                 )
                 
-                # K열(직원_계좌입금액), L열(여행사_지급액) 천단위 콤마 서식 적용
                 worksheet = writer.sheets["자금팀_정산집계표"]
                 for row_idx in range(2, len(excel_save_df) + 2):
                     cell_k = worksheet.cell(row=row_idx, column=11)

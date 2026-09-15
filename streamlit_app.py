@@ -7,6 +7,21 @@ from st_aggrid import AgGrid, GridOptionsBuilder, GridUpdateMode
 import streamlit as st
 import platform
 from openpyxl.styles import Alignment, PatternFill, Font, Border, Side
+import matplotlib.pyplot as plt
+from matplotlib import font_manager, rc
+import platform
+
+# 운영체제별 폰트 설정
+if platform.system() == 'Windows':
+    rc('font', family='Malgun Gothic')
+elif platform.system() == 'Darwin': # Mac
+    rc('font', family='AppleGothic')
+else: # Linux (Streamlit Cloud 등 서버 환경)
+    # 리눅스 환경에 나눔고딕이 설치되어 있어야 함
+    rc('font', family='NanumGothic')
+
+# 마이너스 부호 깨짐 방지
+plt.rcParams['axes.unicode_minus'] = False
 
 if platform.system() == "Windows":
     matplotlib.rc("font", family="Malgun Gothic")

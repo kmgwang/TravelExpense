@@ -1228,7 +1228,7 @@ with tab3:
         output_person.seek(0)
 
         st.download_button(
-            label=`📥 [{selected_person}] 출장자용 산정 내역서 엑셀 다운로드`,
+            label=f"📥 [{selected_person}] 출장자용 산정 내역서 엑셀 다운로드",
             data=output_person,
             file_name=f"화천기공_해외출장산정내역서_{selected_person}.xlsx",
             mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",

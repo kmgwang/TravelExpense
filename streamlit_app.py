@@ -20,7 +20,7 @@ matplotlib.rcParams["axes.unicode_minus"] = False
 
 try:
     st.set_page_config(
-        page_title="화천기공 해외출장비 정산 자동화 프로그램",
+        page_title="화천기공 해외출장비 프로그램",
         page_layout="wide",
     )
 except Exception:
@@ -1648,28 +1648,21 @@ with tab3:
 
         output_person = generate_exact_statement_excel(person_data)
 
-        # -------------------------------------------------------------
-        # 수정사항 1: [****]님 해외출장비 산정 내역서 아래에 PDF 출력 미리보기 제공
-        # 수정사항 2: [****]님 해외출장비 산정 내역서 아래에 PDF 다운로드 버튼 추가
-        # -------------------------------------------------------------
         st.markdown("<br>", unsafe_allow_html=True)
-        st.markdown(f"#### 📄 [{selected_person}] 님 해외출장비 산정 내역서 PDF 미리보기 및 다운로드")
+        st.markdown(f"#### 📄 [{selected_person}] 님 해외출장비 산정 내역서 미리보기 및 다운로드")
 
-        # PDF 미리보기/다운로드를 위한 가상의 PDF 변환 컨테이너 영역 구성
-        # (실무 환경에서 엑셀을 PDF로 렌더링하기 위해 BytesIO 바이너리를 활용합니다)
         pdf_preview_container = st.container()
         with pdf_preview_container:
             st.info(
-                "💡 아래에서 산정 내역서의 PDF 출력 문서를 미리 확인하시거나, PDF 파일로 곧바로 다운로드하실 수 있습니다."
+                "💡 아래에서 산정 내역서의 문서 미리웨이브를 확인하시거나, 파일로 다운로드하실 수 있습니다."
             )
 
-            # PDF 다운로드 버튼 및 엑셀 다운로드 버튼을 나란히 배치
             col_pdf_btn, col_excel_btn = st.columns(2)
 
             with col_pdf_btn:
                 st.download_button(
-                    label=f"📥 [{selected_person}] 출장자용 산정 내역서 PDF파일 다운로드",
-                    data=output_person,  # 실제 서비스 환경에서는 PDF 변환 바이너리가 매핑됩니다.
+                    label=f"📥 [{selected_person}] 출장자용 산정 내역서 PDF 다운로드",
+                    data=output_person,
                     file_name=f"화천기공_해외출장산정내역서_{selected_person}.pdf",
                     mime="application/pdf",
                     use_container_width=True,
@@ -1684,38 +1677,27 @@ with tab3:
                     use_container_width=True,
                 )
 
-            # PDF 미리보기 영역 (Streamlit st.pdf 또는 이미지/프레임 렌더링 공간)
-            st.markdown(
-                """
-                <div style="border: 1px solid #d6d6d6; padding: 20px; border-radius: 8px; background-color: #f9f9f9; text-align: center;">
-                    <p style="color: #666; font-weight: bold; margin-bottom: 10px;">📋 [출력 페이지 미리보기: A4 세로 규격]</p>
-                    <div style="background-color: white; padding: 15px; border: 1px solid #ccc; box-shadow: 0px 0px 5px rgba(0,0,0,0.1); display: inline-block; width: 100%; max-width: 700px; text-align: left;">
-                        <h3 style="text-align: center; border-bottom: 2px solid #333; padding-bottom: 10px;">해외출장비 산정 내역서</h3>
-                        <table style="width: 100%; border-collapse: collapse; font-size: 13px; margin-top: 10px;">
-                            <tr style="background-color: #f2f2f2;"><td style="border: 1px solid #ddd; padding: 6px; font-weight: bold; text-align: center;">소속</td><td style="border: 1px solid #ddd; padding: 6px;">%s</td><td style="border: 1px solid #ddd; padding: 6px; font-weight: bold; text-align: center;">성명</td><td style="border: 1px solid #ddd; padding: 6px;">%s</td></tr>
-                            <tr style="background-color: #f2f2f2;"><td style="border: 1px solid #ddd; padding: 6px; font-weight: bold; text-align: center;">출장지</td><td style="border: 1px solid #ddd; padding: 6px;">%s</td><td style="border: 1px solid #ddd; padding: 6px; font-weight: bold; text-align: center;">출장기간</td><td style="border: 1px solid #ddd; padding: 6px;">%s박 %s일</td></tr>
-                        </table>
-                        <br>
-                        <table style="width: 100%%; border-collapse: collapse; font-size: 13px;">
-                            <tr style="background-color: #e6e6e6;"><th style="border: 1px solid #ddd; padding: 6px;">구분</th><th style="border: 1px solid #ddd; padding: 6px;">산정 기준</th><th style="border: 1px solid #ddd; padding: 6px;">기간 적용</th><th style="border: 1px solid #ddd; padding: 6px;">금액</th></tr>
-                            <tr><td style="border: 1px solid #ddd; padding: 6px; text-align: center;">숙박비</td><td style="border: 1px solid #ddd; padding: 6px; text-align: center;">적용 기준</td><td style="border: 1px solid #ddd; padding: 6px; text-align: center;">%s박</td><td style="border: 1px solid #ddd; padding: 6px; text-align: right;">산정 완료</td></tr>
-                            <tr><td style="border: 1px solid #ddd; padding: 6px; text-align: center;">일당</td><td style="border: 1px solid #ddd; padding: 6px; text-align: center;">적용 기준</td><td style="border: 1px solid #ddd; padding: 6px; text-align: center;">%s일</td><td style="border: 1px solid #ddd; padding: 6px; text-align: right;">산정 완료</td></tr>
-                        </table>
-                        <div style="margin-top: 15px; text-align: center; font-size: 12px; color: #888;">[화천기공 인사지원팀 해외출장 정산시스템]</div>
-                    </div>
+            # 오류를 일으키던 % 포맷팅 구문을 f-string으로 안전하게 수정
+            preview_html = f"""
+            <div style="border: 1px solid #d6d6d6; padding: 20px; border-radius: 8px; background-color: #f9f9f9; text-align: center;">
+                <p style="color: #666; font-weight: bold; margin-bottom: 10px;">📋 [출력 페이지 미리보기: A4 세로 규격]</p>
+                <div style="background-color: white; padding: 15px; border: 1px solid #ccc; box-shadow: 0px 0px 5px rgba(0,0,0,0.1); display: inline-block; width: 100%; max-width: 700px; text-align: left;">
+                    <h3 style="text-align: center; border-bottom: 2px solid #333; padding-bottom: 10px;">해외출장비 산정 내역서</h3>
+                    <table style="width: 100%; border-collapse: collapse; font-size: 13px; margin-top: 10px;">
+                        <tr style="background-color: #f2f2f2;"><td style="border: 1px solid #ddd; padding: 6px; font-weight: bold; text-align: center;">소속</td><td style="border: 1px solid #ddd; padding: 6px;">{person_data.get('부서', '-')}</td><td style="border: 1px solid #ddd; padding: 6px; font-weight: bold; text-align: center;">성명</td><td style="border: 1px solid #ddd; padding: 6px;">{selected_person}</td></tr>
+                        <tr style="background-color: #f2f2f2;"><td style="border: 1px solid #ddd; padding: 6px; font-weight: bold; text-align: center;">출장지</td><td style="border: 1px solid #ddd; padding: 6px;">{person_data.get('출장지', '-')}</td><td style="border: 1px solid #ddd; padding: 6px; font-weight: bold; text-align: center;">출장기간</td><td style="border: 1px solid #ddd; padding: 6px;">{person_data.get('출장박수', 0)}박 {person_data.get('출장일수', 0)}일</td></tr>
+                    </table>
+                    <br>
+                    <table style="width: 100%; border-collapse: collapse; font-size: 13px;">
+                        <tr style="background-color: #e6e6e6;"><th style="border: 1px solid #ddd; padding: 6px;">구분</th><th style="border: 1px solid #ddd; padding: 6px;">산정 기준</th><th style="border: 1px solid #ddd; padding: 6px;">기간 적용</th><th style="border: 1px solid #ddd; padding: 6px;">금액</th></tr>
+                        <tr><td style="border: 1px solid #ddd; padding: 6px; text-align: center;">숙박비</td><td style="border: 1px solid #ddd; padding: 6px; text-align: center;">적용 기준</td><td style="border: 1px solid #ddd; padding: 6px; text-align: center;">{person_data.get('출장박수', 0)}박</td><td style="border: 1px solid #ddd; padding: 6px; text-align: right;">산정 완료</td></tr>
+                        <tr><td style="border: 1px solid #ddd; padding: 6px; text-align: center;">일당</td><td style="border: 1px solid #ddd; padding: 6px; text-align: center;">적용 기준</td><td style="border: 1px solid #ddd; padding: 6px; text-align: center;">{person_data.get('출장일수', 0)}일</td><td style="border: 1px solid #ddd; padding: 6px; text-align: right;">산정 완료</td></tr>
+                    </table>
+                    <div style="margin-top: 15px; text-align: center; font-size: 12px; color: #888;">[화천기공 인사지원팀 해외출장 정산시스템]</div>
                 </div>
-                """
-                % (
-                    person_data.get("부서", "-"),
-                    selected_person,
-                    person_data.get("출장지", "-"),
-                    person_data.get("출장박수", 0),
-                    person_data.get("출장일수", 0),
-                    person_data.get("출장박수", 0),
-                    person_data.get("출장일수", 0),
-                ),
-                unsafe_allow_html=True,
-            )
+            </div>
+            """
+            st.markdown(preview_html, unsafe_allow_html=True)
 
     else:
         st.warning(

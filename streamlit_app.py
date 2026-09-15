@@ -1234,7 +1234,7 @@ with tab3:
                 f"""
             - **소속 부서**: {person_data.get('부서', '-')}
             - **직급 / 직급 구분**: {person_data.get('직급', '-')} ({person_data.get('직급구분', '-')})
-            - **출장지**: {person_data.get('출장지', '-')} (지역: {person_data.get('지역구분', '-')}급)
+            - **출장지**: {person_data.get('출장지', '-')} (지역: {person_data.get('지역구분', '-')})
             """
             )
         with det_c2:
@@ -1250,6 +1250,11 @@ with tab3:
             wb = openpyxl.Workbook()
             ws = wb.active
             ws.title = "산정내역서"
+
+            # 1. 인쇄 영역 설정 (A1:F36)
+            ws.page_setup.printArea = "A1:F36"
+            ws.page_setup.orientation = ws.ORIENTATION_PORTRAIT
+            ws.page_setup.paperSize = ws.PAPERSIZE_A4
 
             ws.views.sheetView[0].showGridLines = True
 
@@ -1274,6 +1279,9 @@ with tab3:
             cell_t.alignment = Alignment(horizontal="center", vertical="center")
             ws.row_dimensions[1].height = 40
 
+            # 2. 지역구분 값 ('급' 제거, 갑/을/병/특 만 표시)
+            region_val = p_data.get("지역구분", "")
+
             info_rows = [
                 [
                     "소속",
@@ -1287,7 +1295,7 @@ with tab3:
                     "출장지",
                     p_data.get("출장지", ""),
                     "지역구분",
-                    f"{p_data.get('지역구분', '')}급",
+                    region_val,
                     "직급구분",
                     p_data.get("직급구분", ""),
                 ],
@@ -1346,10 +1354,9 @@ with tab3:
                 cell.border = thin_border
             ws.row_dimensions[7].height = 22
 
-            region = p_data.get("지역구분", "갑")
             pos_group = p_data.get("직급구분", "3급이하")
-            std_daily, std_hotel = get_standard_rates(region, pos_group)
-            curr_symbol = "¥" if region == "특" else "USD"
+            std_daily, std_hotel = get_standard_rates(region_val, pos_group)
+            curr_symbol = "¥" if region_val == "특" else "USD"
 
             hotel_str = (
                 "실비"
@@ -1360,21 +1367,28 @@ with tab3:
 
             n_nights = p_data.get("출장박수", 0)
             n_days = p_data.get("출장일수", 0)
+            raw_rate = p_data.get("환율", 0)
+            applied_rate = raw_rate / 100.0 if region_val == "특" else raw_rate
 
-            hotel_formula = (
+            # 3. 숙박비 값인 D8셀에 자동 산정된 숙박비 값 입력
+            if std_hotel == "실비":
+                calc_hotel = 0
+            else:
+                calc_hotel = int((std_hotel * applied_rate * n_nights) // 1000 * 1000)
+
+            # 5. 원화 환산 산식 (E8, E9에 산정 기준 * 기간 적용 * 환율 반영)
+            hotel_formula_text = (
                 "실비"
                 if std_hotel == "실비"
-                else f"{std_hotel} * {n_nights}박 * 환율"
+                else f"산정기준({std_hotel}) * 박수({n_nights}) * 환율({applied_rate:,.2f})"
             )
-            hotel_calc_text = (
-                "실비" if std_hotel == "실비" else f"{std_hotel} USD * n박 x 환율"
-            )
+
             row_hotel = [
                 "숙박비",
                 hotel_str,
                 f"{n_nights}박",
-                hotel_formula,
-                hotel_calc_text,
+                calc_hotel,
+                hotel_formula_text,
             ]
             for c_idx, val in enumerate(row_hotel, start=1):
                 cell = ws.cell(row=8, column=c_idx, value=val)
@@ -1383,16 +1397,20 @@ with tab3:
                 cell.alignment = Alignment(
                     horizontal="center", vertical="center"
                 )
+                if c_idx == 4 and isinstance(val, (int, float)):
+                    cell.number_format = "#,##0"
             ws.row_dimensions[8].height = 22
 
-            daily_formula = f"{std_daily} * {n_days}일 * 환율"
-            daily_calc_text = f"{std_daily} USD * m일 x 환율"
+            # 4. 일당 값인 D9셀에 자동 산정된 일당 값 입력
+            calc_daily = int((std_daily * applied_rate * n_days) // 1000 * 1000)
+            daily_formula_text = f"산정기준({std_daily}) * 일수({n_days}) * 환율({applied_rate:,.2f})"
+
             row_daily = [
                 "일당",
                 daily_str,
                 f"{n_days}일",
-                daily_formula,
-                daily_calc_text,
+                calc_daily,
+                daily_formula_text,
             ]
             for c_idx, val in enumerate(row_daily, start=1):
                 cell = ws.cell(row=9, column=c_idx, value=val)
@@ -1401,6 +1419,8 @@ with tab3:
                 cell.alignment = Alignment(
                     horizontal="center", vertical="center"
                 )
+                if c_idx == 4 and isinstance(val, (int, float)):
+                    cell.number_format = "#,##0"
             ws.row_dimensions[9].height = 22
 
             ws.cell(row=10, column=1, value="지급 총액").font = font_bold
@@ -1421,12 +1441,13 @@ with tab3:
             ws.merge_cells("D10:E10")
             total_calc_amt = p_data.get("직원_계좌입금액", 0)
             ws.cell(
-                row=10, column=4, value=f"{total_calc_amt:,.0f} 원"
+                row=10, column=4, value=total_calc_amt
             ).font = font_bold
             ws.cell(row=10, column=4).alignment = Alignment(
                 horizontal="center", vertical="center"
             )
             ws.cell(row=10, column=4).border = thin_border
+            ws.cell(row=10, column=4).number_format = "#,##0"
             ws.cell(row=10, column=5).border = thin_border
 
             ws.cell(row=10, column=6, value="").border = thin_border
@@ -1577,8 +1598,8 @@ with tab3:
                 "A": 16,
                 "B": 18,
                 "C": 14,
-                "D": 14,
-                "E": 14,
+                "D": 16,
+                "E": 28,
                 "F": 16,
             }
             for col_letter, width in col_widths.items():

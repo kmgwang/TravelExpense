@@ -9,6 +9,16 @@ import platform
 import openpyxl
 from openpyxl.styles import Alignment, PatternFill, Font, Border, Side
 from openpyxl.utils import get_column_letter
+import requests
+from bs4ポーツ import BeautifulSoup  # BeautifulSoup 추가 (아래 코드는 올바른 임포트 반영)
+
+# 크롤링 라이브러리 안전 임포트
+try:
+    from bs4 import BeautifulSoup
+except ImportError:
+    import subprocess
+    subprocess.check_call(["pip", "install", "beautifulsoup4", "requests"])
+    from bs4 import BeautifulSoup
 
 if platform.system() == "Windows":
     matplotlib.rc("font", family="Malgun Gothic")
@@ -85,6 +95,48 @@ if "travel_exp_rows" not in st.session_state:
 
 if "other_rows" not in st.session_state:
     st.session_state.other_rows = [{"item": "", "amount": 0, "payer": "여행사"}]
+
+
+# 서울외국환중개 환율 크롤링 함수
+@st.cache_data(ttl=3600)
+def fetch_today_exchange_rates():
+    rates = {"USD": 1350.0, "JPY": 900.0}
+    try:
+        url = "http://www.smbs.biz/ExRate/TodayExRate.jsp"
+        headers = {"User-Agent": "Mozilla/5.0"}
+        response = requests.get(url, headers=headers, timeout=5)
+        response.encoding = "utf-8"
+        
+        if response.status_code == 200:
+            soup = BeautifulSoup(response.text, "html.parser")
+            # 테이블 구조 파싱 (미국 달러, 일본 엔 검색)
+            for tr in soup.find_all("tr"):
+                text = tr.get_text()
+                if "미국" in text and "달러" in text:
+                    cols = tr.find_all(["td", "th"])
+                    for c in cols:
+                        val_str = c.get_text().strip().replace(",", "")
+                        try:
+                            val = float(val_str)
+                            if val > 500:  # 환율 수치 필터링
+                                rates["USD"] = val
+                                break
+                        except ValueError:
+                            pass
+                if "일본" in text and "엔" in text:
+                    cols = tr.find_all(["td", "th"])
+                    for c in cols:
+                        val_str = c.get_text().strip().replace(",", "")
+                        try:
+                            val = float(val_str)
+                            if 100 < val < 5000:  # 엔화(100엔 기준) 수치 필터링
+                                rates["JPY"] = val
+                                break
+                        except ValueError:
+                            pass
+    except Exception as e:
+        print(f"환율 크롤링 오류: {e}")
+    return rates
 
 
 def get_position_group(position):
@@ -270,11 +322,15 @@ with tab1:
             f"✏️ 현재 **[인덱스 {st.session_state.edit_target_index}]** 번 출장 내역 수정 중입니다. 수정 후 아래 버튼을 누르면 내용이 갱신됩니다."
         )
 
-    col_rate_info, col_rate_input = st.columns([2, 1])
+    # 실시간 사이트 환율 불러오기 연동
+    fetched_rates = fetch_today_exchange_rates()
+
+    col_rate_info, col_rate_btn, col_rate_input = st.columns([1.5, 1, 1.5])
     with col_rate_info:
         st.markdown(
-            "🔗 [서울외국환중개 환율 조회 사이트 바로가기](http://www.smbs.biz/ExRate/TodayExRate.jsp)"
+            "🔗 [서울외국환중개 환율 조회](http://www.smbs.biz/ExRate/TodayExRate.jsp)"
         )
+        st.caption(f"🌐 실시간 불러온 환율 (USD: {fetched_rates['USD']:,.2f}원 | JPY 100엔: {fetched_rates['JPY']:,.2f}원)")
 
     target_edit_data = None
     if st.session_state.edit_target_index is not None and len(
@@ -285,8 +341,20 @@ with tab1:
         ]
 
     default_exchange_rate = (
-        target_edit_data["환율"] if target_edit_data else 1350.0
+        target_edit_data["환율"] if target_edit_data else fetched_rates["USD"]
     )
+
+    with col_rate_btn:
+        rate_choice = st.selectbox(
+            "사이트 환율 자동적용",
+            ["선택 안함", "미국 (USD)", "일본 (JPY)"],
+            index=0
+        )
+        if rate_choice == "미국 (USD)":
+            default_exchange_rate = fetched_rates["USD"]
+        elif rate_choice == "일본 (JPY)":
+            default_exchange_rate = fetched_rates["JPY"]
+
     with col_rate_input:
         exchange_rate = st.number_input(
             "적용 환율 입력",
@@ -1209,7 +1277,6 @@ with tab2:
 
 with tab3:
     st.header("📄 해외출장비 산정 내역서 생성")
-   
 
     if len(st.session_state.travel_list) > 0:
         processed_df = process_travel_data(st.session_state.travel_list)
@@ -1249,7 +1316,6 @@ with tab3:
             ws = wb.active
             ws.title = "산정내역서"
 
-            # 명시적 인쇄 영역 설정 (A1:F37) 및 페이지 맞춤 설정
             ws.page_setup.printArea = "A1:F37"
             ws.page_setup.orientation = ws.ORIENTATION_PORTRAIT
             ws.page_setup.paperSize = ws.PAPERSIZE_A4
@@ -1273,7 +1339,6 @@ with tab3:
                 bottom=Side(style="thin", color="000000"),
             )
 
-            # A1:F1 셀병합 (제목)
             ws.merge_cells("A1:F1")
             cell_t = ws["A1"]
             cell_t.value = "해외출장비 산정 내역서"
@@ -1285,7 +1350,6 @@ with tab3:
 
             region_val = p_data.get("지역구분", "")
 
-            # 기본 정보 영역 (행 3 ~ 5)
             info_rows = [
                 [
                     "소속",
@@ -1331,12 +1395,10 @@ with tab3:
                             horizontal="center", vertical="center"
                         )
 
-            # 행 6: 적용 출장비 산정 기준 타이틀
             ws["A6"] = "■ 적용 출장비 산정 기준"
             ws["A6"].font = font_bold
             ws.row_dimensions[6].height = 25
 
-            # 행 7: 환율 및 환율 산정일자
             curr_symbol = "¥" if region_val == "특" else "$"
             raw_rate = p_data.get("환율", 0)
             applied_rate = raw_rate / 100.0 if region_val == "특" else raw_rate
@@ -1376,7 +1438,6 @@ with tab3:
             ws.cell(row=7, column=6).border = thin_border
             ws.row_dimensions[7].height = 22
 
-            # 행 8: 산정 기준 테이블 헤더
             headers_1 = [
                 "구분",
                 "산정 기준",
@@ -1402,7 +1463,6 @@ with tab3:
             ws.cell(row=8, column=6).border = thin_border
             ws.row_dimensions[8].height = 22
 
-            # 행 9: 숙박비
             pos_group = p_data.get("직급구분", "3급이하")
             std_daily, std_hotel = get_standard_rates(region_val, pos_group)
             hotel_str = (
@@ -1442,7 +1502,6 @@ with tab3:
             ws.cell(row=9, column=6).border = thin_border
             ws.row_dimensions[9].height = 22
 
-            # 행 10: 일당
             daily_str = f"{curr_symbol}{std_daily:,} / 일"
             calc_daily = int(
                 (std_daily * applied_rate * n_days) // 1000 * 1000
@@ -1470,7 +1529,6 @@ with tab3:
             ws.cell(row=10, column=6).border = thin_border
             ws.row_dimensions[10].height = 22
 
-            # 행 11: 지급 총액
             ws.cell(row=11, column=1, value="지급 총액").font = font_bold
             ws.cell(row=11, column=1).fill = fill_gray_header
             ws.cell(row=11, column=1).alignment = Alignment(
@@ -1501,12 +1559,10 @@ with tab3:
             ws.cell(row=11, column=6).border = thin_border
             ws.row_dimensions[11].height = 22
 
-            # 행 13: 해외출장 지급규정 타이틀
             ws["A13"] = "■ 해외출장 지급규정"
             ws["A13"].font = font_bold
             ws.row_dimensions[13].height = 25
 
-            # 행 14: 규정 테이블 헤더
             ws.merge_cells("A14:B14")
             ws.cell(row=14, column=1, value="지역")
             ws.cell(row=14, column=3, value="직급")
@@ -1609,12 +1665,10 @@ with tab3:
 
                 current_row = end_r + 1
 
-            # 행 35: 빈 공백 행
             ws.row_dimensions[35].height = 15
             for c_idx in range(1, 7):
                 ws.cell(row=35, column=c_idx).border = Border()
 
-            # 행 36: 위와 같이 해외출장비를 정산 및 지급합니다.
             ws.merge_cells("A36:F36")
             cell_footer1 = ws.cell(
                 row=36, column=1, value="위와 같이 해외출장비를 정산 및 지급합니다."
@@ -1627,7 +1681,6 @@ with tab3:
             for c_idx in range(1, 7):
                 ws.cell(row=36, column=c_idx).border = thin_border
 
-            # 행 37: 신청일 : YYYY년 MM월 DD일
             ws.merge_cells("A37:F37")
             cell_footer2 = ws.cell(
                 row=37,

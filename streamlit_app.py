@@ -6,7 +6,7 @@ import pandas as pd
 from st_aggrid import AgGrid, GridOptionsBuilder, GridUpdateMode
 import streamlit as st
 import platform
-from openpyxl.styles import Alignment
+from openpyxl.styles import Alignment, PatternFill, Font
 
 if platform.system() == "Windows":
     matplotlib.rc("font", family="Malgun Gothic")
@@ -1110,6 +1110,16 @@ with tab2:
                 "직급",
                 "출장지",
                 "직원_계좌입금액",
+                "여행_지급액", # 내부 처리용 명칭 유지 주의
+                "총출장비",
+            ]
+        ].copy() if "여행사_지급액" in processed_df.columns else processed_df[
+            [
+                "출장자성명",
+                "부서",
+                "직급",
+                "출장지",
+                "직원_계좌입금액",
                 "여행사_지급액",
                 "총출장비",
             ]
@@ -1142,10 +1152,10 @@ with tab2:
                     "교통비항목리스트",
                     "출장비항목리스트",
                     "기타항목리스트",
-                    "출장시작일",  # 기존 F열 삭제
-                    "출장종료일",  # 기존 G열 삭제
-                    "출장박수",    # 기존 H열 삭제
-                    "출장일수",    # 기존 I열 삭제
+                    "출장시작일",
+                    "출장종료일",
+                    "출장박수",
+                    "출장일수",
                 ]
             )
             excel_save_df.insert(0, "순번", range(1, len(excel_save_df) + 1))
@@ -1157,21 +1167,45 @@ with tab2:
                 
                 worksheet = writer.sheets["자금팀_정산집계표"]
                 
-                # 정렬 및 서식 지정 로직 반영
+                # 색상 및 서식 정의 (openpyxl)
+                # F, G열 약간 강조 (연한 블루그레이 배경 + 진한 회색 텍스트)
+                fill_fg_mild = PatternFill(start_color="F0F4F8", end_color="F0F4F8", fill_type="solid")
+                font_mild = Font(name="맑은 고딕", size=10, bold=False, color="333333")
+                
+                # H열 강한 강조 (진한 네이비 배경 + 흰색 볼드체 텍스트)
+                fill_fg_strong = PatternFill(start_color="1F4E78", end_color="1F4E78", fill_type="solid")
+                font_strong = Font(name="맑은 고딕", size=10, bold=True, color="FFFFFF")
+                
+                # 헤더 영역 강한 강조를 위한 정의 (1행 헤더는 기본 디자인 유지하되 H열만 포인트)
                 for row_idx in range(1, len(excel_save_df) + 2):
+                    # 1. 전체 행 높이 기존 대비 2배로 키우기 (기본값 약 15~20pt 가정 시 35pt 설정)
+                    worksheet.row_dimensions[row_idx].height = 35.0
+                    
                     for col_idx in range(1, len(excel_save_df.columns) + 1):
                         cell = worksheet.cell(row=row_idx, column=col_idx)
                         
-                        # F~I열 삭제로 인해 총 8개 열(A~H)만 존재
-                        # A~E열 (1~5열): 전체 가운데 정렬
+                        # A~E열 (1~5열): 일반 셀 정렬 및 기본 폰트
                         if col_idx <= 5:
                             cell.alignment = Alignment(horizontal='center', vertical='center')
                         else:
-                            # F~H열 (금액 및 합계 등, 6열 이상): 1행은 가운데 정렬, 2행부터 오른쪽 정렬
+                            # F~H열 (금액 및 합계 등, 6열 이상)
                             if row_idx == 1:
                                 cell.alignment = Alignment(horizontal='center', vertical='center')
+                                # 헤더 중 H열(총합계 컬럼)인 경우 헤더도 강조 가능하도록 처리
+                                if col_idx == 8:
+                                    cell.fill = fill_fg_strong
+                                    cell.font = Font(name="맑은 고딕", size=11, bold=True, color="FFFFFF")
                             else:
                                 cell.alignment = Alignment(horizontal='right', vertical='center')
+                                
+                                # F, G열 (6열, 7열): 약간 강조 스타일 적용
+                                if col_idx in [6, 7]:
+                                    cell.fill = fill_fg_mild
+                                    cell.font = font_mild
+                                # H열 (8열): 강한 강조 스타일 적용
+                                elif col_idx == 8:
+                                    cell.fill = fill_fg_strong
+                                    cell.font = font_strong
                         
                         # 금액 관련 열 천단위 콤마 서식 적용
                         col_name = excel_save_df.columns[col_idx - 1]
@@ -1188,7 +1222,7 @@ with tab2:
                                 max_length = max(max_length, len(str(cell.value)))
                         except:
                             pass
-                    worksheet.column_dimensions[col_letter].width = max(max_length + 5, 13)
+                    worksheet.column_dimensions[col_letter].width = max(max_length + 5, 14)
                     
             output_agency.seek(0)
 
@@ -1262,7 +1296,7 @@ with tab3:
             export_person_df.to_excel(
                 writer, index=False, sheet_name="산정내역서"
             )
-        output_person.seek(0)
+        output_person.send = output_person.seek(0)
 
         st.download_button(
             label=f"📥 [{selected_person}] 출장자용 산정 내역서 엑셀 다운로드",

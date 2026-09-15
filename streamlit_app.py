@@ -6,7 +6,7 @@ import pandas as pd
 from st_aggrid import AgGrid, GridOptionsBuilder, GridUpdateMode
 import streamlit as st
 import platform
-from openpyxl.styles import Alignment, PatternFill, Font
+from openpyxl.styles import Alignment, PatternFill, Font, Border, Side
 
 if platform.system() == "Windows":
     matplotlib.rc("font", family="Malgun Gothic")
@@ -1103,7 +1103,6 @@ with tab2:
         st.markdown("---")
         st.subheader("📑 자금팀 송금 요청 분리 집계표")
 
-        # 오류 수정: 올바른 컬럼명("여행사_지급액") 반영
         fund_view_df = processed_df[
             [
                 "출장자성명",
@@ -1158,18 +1157,32 @@ with tab2:
                 
                 worksheet = writer.sheets["자금팀_정산집계표"]
                 
-                fill_fg_mild = PatternFill(start_color="F0F4F8", end_color="F0F4F8", fill_type="solid")
+                # F, G열(6, 7번째 열) 하늘색 배경 정의
+                light_blue_fill = PatternFill(start_color="D9E1F2", end_color="D9E1F2", fill_type="solid")
                 font_mild = Font(name="맑은 고딕", size=10, bold=False, color="333333")
                 
                 fill_fg_strong = PatternFill(start_color="1F4E78", end_color="1F4E78", fill_type="solid")
                 font_strong = Font(name="맑은 고딕", size=10, bold=True, color="FFFFFF")
                 
-                for row_idx in range(1, len(excel_save_df) + 2):
+                # 테두리 스타일 정의 (요청 2번 반영)
+                thick_border_side = Side(style='medium', color='000000')
+                thin_side = Side(style='thin', color='BFBFBF')
+                dashed_side = Side(style='dashed', color='BFBFBF')
+                solid_vert_side = Side(style='thin', color='BFBFBF')
+
+                max_r = len(excel_save_df) + 1
+                max_c = len(excel_save_df.columns)
+
+                for row_idx in range(1, max_r + 1):
                     worksheet.row_dimensions[row_idx].height = 35.0
                     
-                    for col_idx in range(1, len(excel_save_df.columns) + 1):
+                    for col_idx in range(1, max_c + 1):
                         cell = worksheet.cell(row=row_idx, column=col_idx)
                         
+                        # F, G열(col_idx 6, 7) 배경색을 하늘색으로 지정
+                        if col_idx in [6, 7] and row_idx > 1:
+                            cell.fill = light_blue_fill
+
                         if col_idx <= 5:
                             cell.alignment = Alignment(horizontal='center', vertical='center')
                         else:
@@ -1180,17 +1193,29 @@ with tab2:
                                     cell.font = Font(name="맑은 고딕", size=11, bold=True, color="FFFFFF")
                             else:
                                 cell.alignment = Alignment(horizontal='right', vertical='center')
-                                
-                                if col_idx in [6, 7]:
-                                    cell.fill = fill_fg_mild
-                                    cell.font = font_mild
-                                elif col_idx == 8:
+                                if col_idx == 8:
                                     cell.fill = fill_fg_strong
                                     cell.font = font_strong
                         
                         col_name = excel_save_df.columns[col_idx - 1]
                         if any(k in col_name for k in ["금액", "지급액", "총출장비"]):
                             cell.number_format = '#,##0'
+
+                        # 테두리 로직 적용
+                        if row_idx == 1:
+                            # 1행: 굵은 바깥쪽 테두리 (상/하/좌/우)
+                            t_top = thick_border_side
+                            t_bottom = thick_border_side
+                            t_left = thick_border_side if col_idx == 1 else thin_side
+                            t_right = thick_border_side if col_idx == max_c else thin_side
+                            cell.border = Border(top=t_top, bottom=t_bottom, left=t_left, right=t_right)
+                        else:
+                            # 2행 이하: 안쪽 점선 가로 테두리, 안쪽 실선 세로 테두리
+                            t_top = dashed_side
+                            t_bottom = dashed_side if row_idx < max_r else thick_border_side
+                            t_left = thick_border_side if col_idx == 1 else solid_vert_side
+                            t_right = thick_border_side if col_idx == max_c else solid_vert_side
+                            cell.border = Border(top=t_top, bottom=t_bottom, left=t_left, right=t_right)
                 
                 for col in worksheet.columns:
                     max_length = 0

@@ -1,23 +1,16 @@
 import datetime
 import io
+import platform
+import re
 import matplotlib
 import matplotlib.pyplot as plt
 import pandas as pd
 from st_aggrid import AgGrid, GridOptionsBuilder, GridUpdateMode
 import streamlit as st
-import platform
 import openpyxl
 from openpyxl.styles import Alignment, PatternFill, Font, Border, Side
 from openpyxl.utils import get_column_letter
 import requests
-
-# 크롤링 라이브러리 안전 임포트
-try:
-    from bs4 import BeautifulSoup
-except ImportError:
-    import subprocess
-    subprocess.check_call(["pip", "install", "beautifulsoup4", "requests"])
-    from bs4 import BeautifulSoup
 
 if platform.system() == "Windows":
     matplotlib.rc("font", family="Malgun Gothic")
@@ -96,7 +89,7 @@ if "other_rows" not in st.session_state:
     st.session_state.other_rows = [{"item": "", "amount": 0, "payer": "여행사"}]
 
 
-# 서울외국환중개 환율 크롤링 함수
+# 서울외국환중개 환율 조회 함수 (BeautifulSoup 제거 및 정규식 활용 안전 파싱)
 @st.cache_data(ttl=3600)
 def fetch_today_exchange_rates():
     rates = {"USD": 1350.0, "JPY": 900.0}
@@ -107,33 +100,30 @@ def fetch_today_exchange_rates():
         response.encoding = "utf-8"
         
         if response.status_code == 200:
-            soup = BeautifulSoup(response.text, "html.parser")
-            for tr in soup.find_all("tr"):
-                text = tr.get_text()
-                if "미국" in text and "달러" in text:
-                    cols = tr.find_all(["td", "th"])
-                    for c in cols:
-                        val_str = c.get_text().strip().replace(",", "")
-                        try:
-                            val = float(val_str)
-                            if val > 500:
-                                rates["USD"] = val
-                                break
-                        except ValueError:
-                            pass
-                if "일본" in text and "엔" in text:
-                    cols = tr.find_all(["td", "th"])
-                    for c in cols:
-                        val_str = c.get_text().strip().replace(",", "")
-                        try:
-                            val = float(val_str)
-                            if 100 < val < 5000:
-                                rates["JPY"] = val
-                                break
-                        except ValueError:
-                            pass
+            text = response.text
+            # 미국 달러 환율 추출 시도
+            usd_match = re.search(r'미국.*?달러.*?([0-9,]+\.[0-9]+)', text, re.DOTALL)
+            if usd_match:
+                val_str = usd_match.group(1).replace(",", "")
+                try:
+                    val = float(val_str)
+                    if val > 500:
+                        rates["USD"] = val
+                except ValueError:
+                    pass
+            
+            # 일본 엔 환율 추출 시도
+            jpy_match = re.search(r'일본.*?엔.*?([0-9,]+\.[0-9]+)', text, re.DOTALL)
+            if jpy_match:
+                val_str = jpy_match.group(1).replace(",", "")
+                try:
+                    val = float(val_str)
+                    if 100 < val < 5000:
+                        rates["JPY"] = val
+                except ValueError:
+                    pass
     except Exception as e:
-        print(f"환율 크롤링 오류: {e}")
+        print(f"환율 조회 오류: {e}")
     return rates
 
 

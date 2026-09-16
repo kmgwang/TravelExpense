@@ -1,7 +1,6 @@
 import datetime
 import io
 import platform
-import re
 import matplotlib
 import matplotlib.pyplot as plt
 import pandas as pd
@@ -10,7 +9,6 @@ import streamlit as st
 import openpyxl
 from openpyxl.styles import Alignment, PatternFill, Font, Border, Side
 from openpyxl.utils import get_column_letter
-import requests
 
 if platform.system() == "Windows":
     matplotlib.rc("font", family="Malgun Gothic")
@@ -87,45 +85,6 @@ if "travel_exp_rows" not in st.session_state:
 
 if "other_rows" not in st.session_state:
     st.session_state.other_rows = [{"item": "", "amount": 0, "payer": "여행사"}]
-
-
-# 서울외국환중개 환율 조회 함수 (이미지 구조에 맞춘 정밀 정규식 파싱)
-@st.cache_data(ttl=3600)
-def fetch_today_exchange_rates():
-    rates = {"USD": 1345.30, "JPY": 872.07}
-    try:
-        url = "http://www.smbs.biz/ExRate/TodayExRate.jsp"
-        headers = {"User-Agent": "Mozilla/5.0"}
-        response = requests.get(url, headers=headers, timeout=5)
-        response.encoding = "utf-8"
-        
-        if response.status_code == 200:
-            text = response.text
-            
-            # 미국 달러 (USD) 환율 추출 (예: 미국 달러 (USD) ... 1,345.30 패턴)
-            usd_match = re.search(r'미국\s*달러\s*\(USD\).*?([0-9]{1,3}(?:,[0-9]{3})*\.[0-9]+)', text, re.DOTALL)
-            if usd_match:
-                val_str = usd_match.group(1).replace(",", "")
-                try:
-                    val = float(val_str)
-                    if val > 500:
-                        rates["USD"] = val
-                except ValueError:
-                    pass
-            
-            # 일본 엔 (JPY) (100) 환율 추출 (예: 일본 엔 (JPY) (100) ... 872.07 패턴)
-            jpy_match = re.search(r'일본\s*엔\s*\(JPY\)\s*\(100\).*?([0-9]{1,3}(?:,[0-9]{3})*\.[0-9]+)', text, re.DOTALL)
-            if jpy_match:
-                val_str = jpy_match.group(1).replace(",", "")
-                try:
-                    val = float(val_str)
-                    if 100 < val < 5000:
-                        rates["JPY"] = val
-                except ValueError:
-                    pass
-    except Exception as e:
-        print(f"환율 조회 오류: {e}")
-    return rates
 
 
 def get_position_group(position):
@@ -311,14 +270,12 @@ with tab1:
             f"✏️ 현재 **[인덱스 {st.session_state.edit_target_index}]** 번 출장 내역 수정 중입니다. 수정 후 아래 버튼을 누르면 내용이 갱신됩니다."
         )
 
-    fetched_rates = fetch_today_exchange_rates()
-
-    col_rate_info, col_rate_btn, col_rate_input = st.columns([1.5, 1, 1.5])
+    col_rate_info, col_rate_input = st.columns([2, 2])
     with col_rate_info:
         st.markdown(
-            "🔗 [서울외국환중개 환율 조회](http://www.smbs.biz/ExRate/TodayExRate.jsp)"
+            "🔗 [서울외국환중개 환율 조회 링크](http://www.smbs.biz/ExRate/TodayExRate.jsp)"
         )
-        st.caption(f"🌐 실시간 불러온 환율 (USD: {fetched_rates['USD']:,.2f}원 | JPY 100엔: {fetched_rates['JPY']:,.2f}원)")
+        st.caption("🌐 위 링크를 클릭하여 조회한 환율을 우측 칸에 직접 입력해주세요.")
 
     target_edit_data = None
     if st.session_state.edit_target_index is not None and len(
@@ -329,19 +286,8 @@ with tab1:
         ]
 
     default_exchange_rate = (
-        target_edit_data["환율"] if target_edit_data else fetched_rates["USD"]
+        target_edit_data["환율"] if target_edit_data else 1345.30
     )
-
-    with col_rate_btn:
-        rate_choice = st.selectbox(
-            "사이트 환율 자동적용",
-            ["선택 안함", "미국 (USD)", "일본 (JPY)"],
-            index=0
-        )
-        if rate_choice == "미국 (USD)":
-            default_exchange_rate = fetched_rates["USD"]
-        elif rate_choice == "일본 (JPY)":
-            default_exchange_rate = fetched_rates["JPY"]
 
     with col_rate_input:
         exchange_rate = st.number_input(

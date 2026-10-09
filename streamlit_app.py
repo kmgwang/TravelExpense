@@ -1,6 +1,7 @@
 import base64
 import datetime
 import io
+import os
 import platform
 import matplotlib
 import matplotlib.pyplot as plt
@@ -31,98 +32,114 @@ except Exception:
     pass
 
 # ----------------------------------------------------
-# 2. 로고 이미지 Base64 변환 함수
+# 2. 로고 이미지 가져오기 (파일 탐색 + 이미지 내장 로직)
 # ----------------------------------------------------
-def get_base64_of_bin_file(bin_file):
-    with open(bin_file, 'rb') as f:
-        data = f.read()
-    return base64.b64encode(data).decode()
+def get_logo_base64():
+    # 1. 실행 경로 내 이미지 파일 탐색
+    possible_names = [
+        "TalkMedia_i_93ffae1a03a5.png_2.png",
+        "TalkMedia_i_93ffae1a03a5.png.png",
+        "logo.png",
+        "hwacheon_logo.png"
+    ]
+    for name in possible_names:
+        if os.path.exists(name):
+            try:
+                with open(name, "rb") as f:
+                    return base64.b64encode(f.read()).decode()
+            except Exception:
+                pass
+            
+    # 2. 파일이 없을 경우 현재 폴더의 모든 png 이미지 중 첫 번째 이미지 자동 선택
+    for file in os.listdir("."):
+        if file.lower().endswith(".png"):
+            try:
+                with open(file, "rb") as f:
+                    return base64.b64encode(f.read()).decode()
+            except Exception:
+                pass
+    return ""
 
-# 제공해주신 로고 이미지 파일명 지정
-logo_filename = "TalkMedia_i_93ffae1a03a5.png.png"
-logo_base64 = ""
-try:
-    logo_base64 = get_base64_of_bin_file(logo_filename)
-except Exception:
-    pass
+logo_base64 = get_logo_base64()
 
 # ----------------------------------------------------
 # 3. 화천 브랜드 커스텀 CSS 적용
 # ----------------------------------------------------
 st.markdown(
-    f"""
+    """
     <style>
     @import url('https://cdn.jsdelivr.net/gh/orioncactus/pretendard/dist/web/static/pretendard.css');
     
-    * {{
+    * {
         font-family: 'Pretendard', -apple-system, BlinkMacSystemFont, system-ui, Roboto, 'Helvetica Neue', 'Segoe UI', 'Apple SD Gothic Neo', 'Malgun Gothic', sans-serif !important;
-    }}
+    }
 
-    .stApp {{
+    .stApp {
         background-color: #f8f9fa;
-    }}
+    }
     
-    .block-container {{
+    .block-container {
         max-width: 1200px !important;
         padding-top: 1.5rem;
         padding-bottom: 3rem;
         padding-left: 1.5rem;
         padding-right: 1.5rem;
-    }}
+    }
 
     /* 화천 상단 브랜드 헤더 */
-    .hwacheon-header {{
+    .hwacheon-header {
         background-color: #ffffff;
-        padding: 20px 30px;
+        padding: 22px 32px;
         border-radius: 12px;
         border: 1px solid #e5e7eb;
         margin-bottom: 24px;
         box-shadow: 0 2px 8px rgba(0,0,0,0.03);
         display: flex;
         align-items: center;
-        gap: 20px;
-    }}
+        gap: 24px;
+    }
     
-    .hwacheon-logo-img {{
+    .hwacheon-logo-img {
         height: 38px;
+        max-width: 220px;
         object-fit: contain;
-    }}
+    }
 
-    .hwacheon-header-divider {{
+    .hwacheon-header-divider {
         width: 1px;
-        height: 36px;
-        background-color: #e5e7eb;
-    }}
+        height: 38px;
+        background-color: #d1d5db;
+    }
 
-    .hwacheon-title-area {{
+    .hwacheon-title-area {
         display: flex;
         flex-direction: column;
-    }}
+    }
 
-    .hwacheon-main-title {{
-        font-size: 20px;
-        font-weight: 700;
-        color: #111827;
+    .hwacheon-main-title {
+        font-size: 22px;
+        font-weight: 800;
+        color: #1f2937;
         margin: 0;
         line-height: 1.2;
-    }}
+    }
 
-    .hwacheon-subtitle {{
+    .hwacheon-subtitle {
         color: #6b7280;
         font-size: 13px;
-        margin-top: 4px;
-    }}
+        margin-top: 5px;
+    }
 
     /* Tab 스타일링 */
-    .stTabs [data-baseweb="tab-list"] {{
+    .stTabs [data-baseweb="tab-list"] {
         gap: 8px;
         background-color: #ffffff;
         padding: 8px;
         border-radius: 12px;
         border: 1px solid #e5e7eb;
-    }}
+    }
 
-    .stTabs [data-baseweb="tab"] {{
+    .stTabs [data-baseweb="tab"] {
         height: 44px;
         border-radius: 8px;
         padding: 0px 20px;
@@ -131,30 +148,30 @@ st.markdown(
         color: #4b5563;
         background-color: transparent;
         border: none !important;
-    }}
+    }
 
-    .stTabs [aria-selected="true"] {{
+    .stTabs [aria-selected="true"] {
         background-color: #0055A5 !important;
         color: #ffffff !important;
-    }}
+    }
 
     /* 하이라이트 박스 */
-    .row-highlight-yellow {{
+    .row-highlight-yellow {
         background-color: #fff9c4;
         padding: 8px 12px;
         border-radius: 6px;
         width: 100%;
-    }}
+    }
 
-    .row-highlight-blue {{
+    .row-highlight-blue {
         background-color: #e1f5fe;
         padding: 10px 12px;
         border-radius: 6px;
         width: 100%;
-    }}
+    }
 
     /* 버튼 스타일 */
-    .stButton>button {{
+    .stButton>button {
         background-color: #0055A5;
         color: white;
         border-radius: 8px;
@@ -162,31 +179,32 @@ st.markdown(
         font-weight: 600;
         padding: 10px 20px;
         transition: all 0.2s ease;
-    }}
+    }
     
-    .stButton>button:hover {{
+    .stButton>button:hover {
         background-color: #003F7D;
         color: white;
-    }}
+    }
 
-    input[aria-label*="항목"] {{
+    input[aria-label*="항목"] {
         text-align: center !important;
-    }}
-    input[aria-label*="금액"] {{
+    }
+    input[aria-label*="금액"] {
         text-align: right !important;
-    }}
+    }
     </style>
 """,
     unsafe_allow_html=True,
 )
 
 # ----------------------------------------------------
-# 4. 상단 헤더 (회사의 실제 로고 추가)
+# 4. 상단 헤더 (화천 로고 이미지 적용)
 # ----------------------------------------------------
 if logo_base64:
     logo_html = f'<img src="data:image/png;base64,{logo_base64}" class="hwacheon-logo-img" alt="HWACHEON">'
 else:
-    logo_html = '<span style="font-size: 24px; font-weight: 800; color: #0055A5;">HWACHEON</span>'
+    # 이미지 파일이 로컬 폴더에 없을 경우 사이드바에서 로고를 즉시 업로드할 수 있는 안내 표시
+    logo_html = '<div style="font-size: 22px; font-weight: 900; color: #0055A5; letter-spacing: -1px;">HWACHEON</div>'
 
 st.markdown(
     f"""
@@ -201,6 +219,14 @@ st.markdown(
     """,
     unsafe_allow_html=True,
 )
+
+# 파일이 없는 경우 사이드바에서 로고 이미지를 업로드할 수 있도록 폴백 제공
+if not logo_base64:
+    st.sidebar.warning("⚠️ 로고 이미지 파일이 자동 인식되지 않았습니다.")
+    uploaded_logo = st.sidebar.file_uploader("화천 로고 이미지 파일 업로드 (.png)", type=["png", "jpg"])
+    if uploaded_logo is not None:
+        logo_base64 = base64.b64encode(uploaded_logo.read()).decode()
+        st.rerun()
 
 # ----------------------------------------------------
 # 5. 세션 상태 초기화 및 데이터 처리 함수

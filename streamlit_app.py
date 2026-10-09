@@ -77,13 +77,34 @@ st.markdown(
     }
     section[data-testid="stSidebar"] > div:first-child { padding-top: 0.5rem; }
 
+    /* 사이드바 항상 열림 고정 (접기/펼치기 버튼 제거) */
+    section[data-testid="stSidebar"] {
+        transform: none !important;
+        margin-left: 0 !important;
+        visibility: visible !important;
+        min-width: 290px !important;
+        max-width: 290px !important;
+        width: 290px !important;
+    }
+    [data-testid="stSidebarCollapseButton"],
+    [data-testid="stSidebarCollapsedControl"],
+    [data-testid="collapsedControl"],
+    [data-testid="stSidebarResizeHandle"],
+    section[data-testid="stSidebar"] button[kind="header"],
+    section[data-testid="stSidebar"] button[kind="headerNoPadding"] {
+        display: none !important;
+    }
+
+    /* 사이드바 상단 브랜드 영역 (로고 + 시스템 설명 문구) */
+    .hw-side-brand {
+        padding: 18px 8px 22px 8px;
+        border-bottom: 1px solid var(--hw-line);
+        margin-bottom: 22px;
+    }
     .hw-side-logo {
         display: flex;
         align-items: center;
         gap: 12px;
-        padding: 18px 8px 22px 8px;
-        border-bottom: 1px solid var(--hw-line);
-        margin-bottom: 22px;
     }
     .hw-side-logo svg { height: 30px; width: auto; flex-shrink: 0; }
     .hw-side-logo-text {
@@ -93,20 +114,18 @@ st.markdown(
         color: var(--hw-blue);
         line-height: 1;
     }
+    .hw-side-desc {
+        font-size: 12.5px;
+        color: var(--hw-text-sub);
+        line-height: 1.6;
+        margin-top: 14px;
+    }
     .hw-side-caption {
         font-size: 12px;
         font-weight: 600;
         letter-spacing: 1px;
         color: var(--hw-text-sub);
         padding: 0 8px 10px 8px;
-    }
-    .hw-side-foot {
-        font-size: 12px;
-        color: var(--hw-text-sub);
-        padding: 28px 8px 0 8px;
-        line-height: 1.6;
-        border-top: 1px solid var(--hw-line);
-        margin-top: 28px;
     }
 
     /* 사이드바 메뉴 (라디오 → 메뉴 리스트) */
@@ -271,39 +290,34 @@ MENU_1 = "1. 출장 정보 입력"
 MENU_2 = "2. 자금팀 연결 자료 생성"
 MENU_3 = "3. 출장비 산정 내역서 생성"
 
-LOGO_SVG = """
-<svg viewBox="0 53 906 264" xmlns="http://www.w3.org/2000/svg" aria-label="HWACHEON">
-  <rect x="0"   y="53"  width="88"  height="264" fill="#005CAB"/>
-  <rect x="193" y="53"  width="519" height="88"  fill="#005CAB"/>
-  <rect x="193" y="229" width="519" height="88"  fill="#005CAB"/>
-  <rect x="818" y="53"  width="88"  height="264" fill="#005CAB"/>
-</svg>
-"""
+# 주의: 마크다운이 코드 블록으로 오인하지 않도록 HTML은 빈 줄/들여쓰기 없이 한 줄로 구성
+LOGO_SVG = (
+    '<svg viewBox="0 53 906 264" xmlns="http://www.w3.org/2000/svg" aria-label="HWACHEON">'
+    '<rect x="0" y="53" width="88" height="264" fill="#005CAB"/>'
+    '<rect x="193" y="53" width="519" height="88" fill="#005CAB"/>'
+    '<rect x="193" y="229" width="519" height="88" fill="#005CAB"/>'
+    '<rect x="818" y="53" width="88" height="264" fill="#005CAB"/>'
+    "</svg>"
+)
+
+SIDEBAR_BRAND_HTML = (
+    '<div class="hw-side-brand">'
+    '<div class="hw-side-logo">'
+    + LOGO_SVG
+    + '<div class="hw-side-logo-text">HWACHEON</div>'
+    "</div>"
+    '<div class="hw-side-desc">화천기공 해외출장 경비 산정 &amp; 자금팀 정산 자동화 시스템</div>'
+    "</div>"
+    '<div class="hw-side-caption">MENU</div>'
+)
 
 with st.sidebar:
-    st.markdown(
-        f"""
-        <div class="hw-side-logo">
-            {LOGO_SVG}
-            <div class="hw-side-logo-text">HWACHEON</div>
-        </div>
-        <div class="hw-side-caption">MENU</div>
-        """,
-        unsafe_allow_html=True,
-    )
+    st.markdown(SIDEBAR_BRAND_HTML, unsafe_allow_html=True)
     menu = st.radio(
         "메뉴",
         [MENU_1, MENU_2, MENU_3],
         key="nav_menu",
         label_visibility="collapsed",
-    )
-    st.markdown(
-        """
-        <div class="hw-side-foot">
-            화천기공 해외출장 경비 산정 &amp;<br>자금팀 정산 자동화 시스템
-        </div>
-        """,
-        unsafe_allow_html=True,
     )
 
 # 페이지 상단 헤드

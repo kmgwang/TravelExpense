@@ -1,8 +1,12 @@
 import base64
 import datetime
 import io
+import json
 import os
 import platform
+import sqlite3
+from contextlib import closing
+from copy import copy
 import matplotlib
 import matplotlib.pyplot as plt
 import pandas as pd
@@ -22,10 +26,27 @@ else:
     matplotlib.rcParams["font.family"] = "NanumGothic"
 matplotlib.rcParams["axes.unicode_minus"] = False
 
+def _make_favicon():
+    """브라우저 탭 아이콘: 화천 로고 모양(파란 막대)"""
+    try:
+        from PIL import Image, ImageDraw
+
+        W = 128
+        k = W / 906.0
+        oy = (W - 264 * k) / 2 - 53 * k
+        im = Image.new("RGBA", (W, W), (255, 255, 255, 0))
+        d = ImageDraw.Draw(im)
+        for x0, y0, x1, y1 in ((0, 53, 88, 317), (193, 53, 712, 141), (193, 229, 712, 317), (818, 53, 906, 317)):
+            d.rectangle([x0 * k, y0 * k + oy, x1 * k, y1 * k + oy], fill=(0, 92, 171, 255))
+        return im
+    except Exception:
+        return None
+
+
 try:
     st.set_page_config(
         page_title="HWACHEON - 해외출장비 정산 자동화 시스템",
-        page_icon="✈️",
+        page_icon=_make_favicon(),
         layout="wide",
         initial_sidebar_state="expanded",
     )
@@ -35,6 +56,7 @@ except Exception:
 # ----------------------------------------------------
 # 2. 화천(HWACHEON) 홈페이지 스타일 커스텀 CSS
 #    브랜드 컬러: PANTONE 2728C / C96 M69 Y0 K0 / R0 G92 B171 (#005CAB)
+#    홈페이지 특징: 흰 배경 + 연회색(#F5F6F8) 라운드 카드/입력창 + 브랜드 블루 포인트 + Pretendard 폰트
 # ----------------------------------------------------
 st.markdown(
     """
@@ -57,30 +79,27 @@ st.markdown(
     .stApp td, .stApp th, .stApp li, .stApp a, .stApp div[data-baseweb] {
         font-family: 'Pretendard', -apple-system, BlinkMacSystemFont, system-ui, Roboto,
                      'Helvetica Neue', 'Segoe UI', 'Apple SD Gothic Neo', 'Malgun Gothic', sans-serif;
+        letter-spacing: -0.01em;
     }
 
     /* 메인 배경 및 레이아웃 */
     .stApp { background-color: #ffffff; color: var(--hw-text); }
-    header[data-testid="stHeader"] { background: transparent; }
+    header[data-testid="stHeader"] {
+        background: rgba(255, 255, 255, 0.92);
+        border-bottom: 1px solid var(--hw-line);
+    }
     .block-container {
-        max-width: 1200px !important;
-        padding-top: 2.5rem;
-        padding-bottom: 4rem;
+        max-width: 1280px !important;
+        padding-top: 3.5rem;
+        padding-bottom: 3rem;
         padding-left: 2.5rem;
         padding-right: 2.5rem;
     }
 
-    /* ---------- 사이드바 ---------- */
+    /* ---------- 사이드바 (항상 열림 고정) ---------- */
     section[data-testid="stSidebar"] {
         background-color: #ffffff;
         border-right: 1px solid var(--hw-line);
-        min-width: 290px;
-        max-width: 290px;
-    }
-    section[data-testid="stSidebar"] > div:first-child { padding-top: 0.5rem; }
-
-    /* 사이드바 항상 열림 고정 (접기/펼치기 버튼 제거) */
-    section[data-testid="stSidebar"] {
         transform: none !important;
         margin-left: 0 !important;
         visibility: visible !important;
@@ -88,6 +107,7 @@ st.markdown(
         max-width: 290px !important;
         width: 290px !important;
     }
+    section[data-testid="stSidebar"] > div:first-child { padding-top: 0.5rem; }
     [data-testid="stSidebarCollapseButton"],
     [data-testid="stSidebarCollapsedControl"],
     [data-testid="collapsedControl"],
@@ -101,129 +121,135 @@ st.markdown(
     .hw-side-brand {
         padding: 18px 8px 22px 8px;
         border-bottom: 1px solid var(--hw-line);
-        margin-bottom: 22px;
+        margin-bottom: 18px;
     }
-    .hw-side-logo {
-        display: flex;
-        align-items: center;
-        gap: 12px;
-    }
+    .hw-side-logo { display: flex; align-items: center; gap: 12px; }
     .hw-side-logo svg { height: 30px; width: auto; flex-shrink: 0; }
     .hw-side-logo-text {
-        font-size: 22px;
-        font-weight: 800;
-        letter-spacing: 1.5px;
-        color: var(--hw-blue);
-        line-height: 1;
+        font-size: 20px; font-weight: 800; letter-spacing: 1.2px;
+        color: var(--hw-blue); line-height: 1;
     }
     .hw-side-desc {
-        font-size: 12.5px;
-        color: var(--hw-text-sub);
-        line-height: 1.6;
-        margin-top: 14px;
+        font-size: 12.5px; color: var(--hw-text-sub); line-height: 1.6; margin-top: 14px;
     }
     .hw-side-caption {
-        font-size: 12px;
-        font-weight: 600;
-        letter-spacing: 1px;
-        color: var(--hw-text-sub);
-        padding: 0 8px 10px 8px;
+        font-size: 12px; font-weight: 700; letter-spacing: 1.2px;
+        color: var(--hw-text-sub); padding: 14px 8px 8px 8px;
     }
 
-    /* 사이드바 메뉴 (라디오 → 메뉴 리스트) */
-    section[data-testid="stSidebar"] div[role="radiogroup"] {
-        gap: 6px;
+    /* 사이드바 메뉴 (버튼 → 홈페이지식 메뉴 리스트) */
+    section[data-testid="stSidebar"] .stButton > button {
         width: 100%;
-    }
-    section[data-testid="stSidebar"] div[role="radiogroup"] > label {
-        width: 100%;
-        padding: 14px 18px;
-        border-radius: 12px;
-        background-color: transparent;
-        cursor: pointer;
-        transition: background-color 0.15s ease;
-        margin: 0;
-    }
-    section[data-testid="stSidebar"] div[role="radiogroup"] > label > div:first-child {
-        display: none;               /* 라디오 동그라미 숨김 */
-    }
-    section[data-testid="stSidebar"] div[role="radiogroup"] > label p {
-        font-size: 16px;
-        font-weight: 600;
+        justify-content: flex-start;
+        text-align: left;
+        background: transparent;
         color: var(--hw-text);
+        border: none;
+        border-radius: 12px;
+        padding: 13px 18px;
+        font-size: 15.5px;
+        font-weight: 600;
+        box-shadow: none;
     }
-    section[data-testid="stSidebar"] div[role="radiogroup"] > label:hover {
-        background-color: var(--hw-gray-bg);
+    section[data-testid="stSidebar"] .stButton > button > div { width: 100%; justify-content: flex-start; }
+    section[data-testid="stSidebar"] .stButton > button p {
+        text-align: left; width: 100%; margin: 0; color: inherit; font-weight: inherit;
     }
-    section[data-testid="stSidebar"] div[role="radiogroup"] > label:has(input:checked) {
-        background-color: var(--hw-blue);
+    section[data-testid="stSidebar"] .stButton > button:hover {
+        background: var(--hw-gray-bg); color: var(--hw-text);
     }
-    section[data-testid="stSidebar"] div[role="radiogroup"] > label:has(input:checked) p {
-        color: #ffffff;
+    section[data-testid="stSidebar"] .stButton > button[kind="primary"],
+    section[data-testid="stSidebar"] .stButton > button[data-testid="stBaseButton-primary"] {
+        background: var(--hw-blue); color: #ffffff;
+    }
+    section[data-testid="stSidebar"] .stButton > button[kind="primary"]:hover,
+    section[data-testid="stSidebar"] .stButton > button[data-testid="stBaseButton-primary"]:hover {
+        background: var(--hw-blue-dark); color: #ffffff;
+    }
+    section[data-testid="stSidebar"] [class*="st-key-sub_"] button {
+        padding-left: 34px; font-size: 14.5px; font-weight: 500;
     }
 
-    /* ---------- 페이지 헤드 ---------- */
+    /* ---------- 페이지 헤드 (경로 + 제목) ---------- */
     .hw-page-head {
-        padding-bottom: 18px;
+        padding-bottom: 20px;
         border-bottom: 1px solid var(--hw-line);
         margin-bottom: 28px;
     }
+    .hw-crumb { font-size: 13px; color: var(--hw-text-sub); margin-bottom: 14px; }
+    .hw-crumb b { color: var(--hw-blue); font-weight: 700; }
+    .hw-crumb i { font-style: normal; margin: 0 8px; color: #B6BCC6; }
     .hw-page-eyebrow {
-        font-size: 13px;
-        font-weight: 700;
-        letter-spacing: 1.2px;
-        color: var(--hw-blue);
-        margin-bottom: 6px;
+        font-size: 13px; font-weight: 700; letter-spacing: 1.2px;
+        color: var(--hw-blue); margin-bottom: 6px;
     }
-    .hw-page-title {
-        font-size: 30px;
-        font-weight: 800;
-        color: var(--hw-text);
-        letter-spacing: -0.5px;
+    .hw-page-title { font-size: 32px; font-weight: 800; color: var(--hw-text); letter-spacing: -0.6px; }
+    .hw-page-sub { color: var(--hw-text-sub); font-size: 14.5px; margin-top: 8px; }
+
+    /* ---------- 홈 (메인) ---------- */
+    .hw-hero { padding: 8px 0 34px 0; }
+    .hw-hero-eyebrow { font-size: 13px; font-weight: 700; letter-spacing: 2px; color: var(--hw-blue); margin-bottom: 14px; }
+    .hw-hero-title { font-size: 44px; font-weight: 800; line-height: 1.25; letter-spacing: -1px; color: var(--hw-text); }
+    .hw-hero-sub { font-size: 16px; color: var(--hw-text-sub); margin-top: 16px; line-height: 1.7; }
+
+    .hw-prog-card {
+        background: var(--hw-gray-bg);
+        border-radius: 28px 28px 0 0;
+        padding: 40px 40px 30px 40px;
+        min-height: 400px;
+        margin-bottom: -1rem;
     }
-    .hw-page-sub {
-        color: var(--hw-text-sub);
-        font-size: 14px;
-        margin-top: 6px;
+    .hw-prog-top { display: flex; justify-content: space-between; align-items: center; margin-bottom: 34px; }
+    .hw-prog-tag { font-size: 13px; font-weight: 700; letter-spacing: 1.5px; color: var(--hw-text-sub); }
+    .hw-prog-ico {
+        width: 60px; height: 60px; border-radius: 18px; background: #ffffff;
+        display: flex; align-items: center; justify-content: center;
+    }
+    .hw-prog-ico svg { width: 30px; height: 30px; }
+    .hw-prog-title { font-size: 28px; font-weight: 800; letter-spacing: -0.5px; color: var(--hw-text); margin-bottom: 14px; }
+    .hw-prog-desc { font-size: 15px; color: #4B5563; line-height: 1.7; margin-bottom: 22px; }
+    .hw-prog-list { margin: 0; padding: 0; list-style: none; }
+    .hw-prog-list li {
+        font-size: 14.5px; color: var(--hw-text); padding: 7px 0 7px 18px; position: relative;
+    }
+    .hw-prog-list li:before {
+        content: ""; position: absolute; left: 0; top: 15px;
+        width: 6px; height: 6px; border-radius: 50%; background: var(--hw-blue);
+    }
+    .hw-prog-stat {
+        margin-top: 22px; padding-top: 18px; border-top: 1px solid var(--hw-line);
+        font-size: 13.5px; color: var(--hw-text-sub);
+    }
+    .hw-prog-stat b { color: var(--hw-blue); font-weight: 800; }
+    .st-key-home_calc_btn button, .st-key-home_manage_btn button {
+        border-radius: 0 0 28px 28px !important;
+        padding: 20px 0 !important;
+        font-size: 16px !important;
     }
 
     /* 제목 */
-    .stApp h3 {
-        font-weight: 800;
-        letter-spacing: -0.3px;
-        color: var(--hw-text);
-    }
+    .stApp h3 { font-weight: 800; letter-spacing: -0.3px; color: var(--hw-text); }
 
-    /* 카드 스타일 섹션 (홈페이지 게시물 카드 느낌) */
-    .hw-card {
-        background: var(--hw-gray-bg);
-        padding: 28px;
-        border-radius: 20px;
-        margin-bottom: 20px;
-    }
+    /* 카드 스타일 섹션 */
+    .hw-card { background: var(--hw-gray-bg); padding: 28px; border-radius: 20px; margin-bottom: 20px; }
+    .hw-filter-title { font-size: 17px; font-weight: 800; margin: 4px 0 12px 0; }
 
     /* 하이라이트 박스 */
     .row-highlight-yellow {
-        background-color: #FEE2E2;
-        color: #991B1B;
-        padding: 10px 14px;
-        border-radius: 10px;
-        font-weight: 600;
+        background-color: #FEE2E2; color: #991B1B; padding: 10px 14px;
+        border-radius: 10px; font-weight: 600;
     }
     .row-highlight-blue {
-        background-color: var(--hw-blue-soft);
-        border: none;
-        color: var(--hw-blue);
-        padding: 12px 16px;
-        border-radius: 10px;
-        font-size: 16px;
+        background-color: var(--hw-blue-soft); border: none; color: var(--hw-blue);
+        padding: 12px 16px; border-radius: 10px; font-size: 16px;
     }
 
     /* 입력 필드 (홈페이지 검색창 스타일) */
     div[data-baseweb="input"],
     div[data-baseweb="base-input"],
     div[data-baseweb="select"] > div,
-    div[data-testid="stDateInput"] div[data-baseweb="input"] {
+    div[data-testid="stDateInput"] div[data-baseweb="input"],
+    div[data-baseweb="textarea"] {
         background-color: var(--hw-gray-bg) !important;
         border: 1px solid transparent !important;
         border-radius: 10px !important;
@@ -241,7 +267,7 @@ st.markdown(
     input[aria-label*="금액"] { text-align: right !important; }
 
     /* 버튼 */
-    .stButton > button {
+    .stButton > button, .stDownloadButton > button, .stFormSubmitButton > button {
         background-color: var(--hw-blue);
         color: #ffffff;
         border-radius: 10px;
@@ -250,47 +276,62 @@ st.markdown(
         padding: 10px 22px;
         transition: all 0.2s ease;
     }
-    .stButton > button:hover {
-        background-color: var(--hw-blue-dark);
-        color: #ffffff;
-        border: none;
+    .stButton > button:hover, .stDownloadButton > button:hover, .stFormSubmitButton > button:hover {
+        background-color: var(--hw-blue-dark); color: #ffffff; border: none;
     }
-    .stButton > button:focus:not(:active) { color: #ffffff; border: none; }
+    .stButton > button:focus:not(:active), .stDownloadButton > button:focus:not(:active) { color: #ffffff; border: none; }
+
+    /* 탭 (홈페이지 하단 알약형 메뉴 스타일) */
+    .stTabs [data-baseweb="tab-list"] {
+        gap: 6px; background-color: #ffffff; padding: 8px; border-radius: 14px;
+        border: 1px solid var(--hw-line); box-shadow: 0 4px 16px rgba(0, 0, 0, 0.05);
+        width: fit-content;
+    }
+    .stTabs [data-baseweb="tab"] {
+        height: 42px; border-radius: 10px; padding: 0 22px; font-weight: 600;
+        color: #374151; background-color: transparent;
+    }
+    .stTabs [aria-selected="true"] { background-color: var(--hw-blue) !important; color: #ffffff !important; }
+    .stTabs [data-baseweb="tab-highlight"], .stTabs [data-baseweb="tab-border"] { display: none; }
 
     /* 체크박스 포인트 컬러 */
     label[data-baseweb="checkbox"] > span:first-child[data-checked="true"],
-    div[data-baseweb="checkbox"] > div[aria-checked="true"] {
-        background-color: var(--hw-blue) !important;
-    }
+    div[data-baseweb="checkbox"] > div[aria-checked="true"] { background-color: var(--hw-blue) !important; }
 
-    /* 알림 박스 */
+    /* 알림 박스 / 확장 패널 / 표 */
     div[data-testid="stAlert"] { border-radius: 12px; }
+    div[data-testid="stExpander"] { border: 1px solid var(--hw-line); border-radius: 14px; background: #ffffff; }
+    div[data-testid="stDataFrame"] { border-radius: 12px; overflow: hidden; border: 1px solid var(--hw-line); }
 
     /* 메트릭 카드 */
-    div[data-testid="stMetric"] {
-        background-color: var(--hw-gray-bg);
-        border-radius: 20px;
-        padding: 22px 26px;
-    }
+    div[data-testid="stMetric"] { background-color: var(--hw-gray-bg); border-radius: 20px; padding: 22px 26px; }
     div[data-testid="stMetricLabel"] p { color: var(--hw-text-sub); font-weight: 600; }
-    div[data-testid="stMetricValue"] { color: var(--hw-blue); font-weight: 800; }
+    div[data-testid="stMetricValue"] { color: var(--hw-blue); font-weight: 800; font-size: 26px; }
+    div[data-testid="stMetricValue"] > div { overflow: visible; text-overflow: clip; white-space: nowrap; }
 
-    /* 구분선 */
+    /* 구분선 / 링크 / 푸터 */
     .stApp hr { border-color: var(--hw-line); }
-
-    /* 링크 */
     .stApp a { color: var(--hw-blue); }
+    .hw-footer {
+        margin-top: 64px; padding: 26px 0 8px 0; border-top: 1px solid var(--hw-line);
+        font-size: 12.5px; color: var(--hw-text-sub); line-height: 1.7;
+    }
+    .hw-footer b { color: var(--hw-text); }
     </style>
 """,
     unsafe_allow_html=True,
 )
 
 # ----------------------------------------------------
-# 3. 사이드바 (로고 + 메뉴 내비게이션)
+# 3. 사이드바 (로고 + 프로그램/메뉴 내비게이션)
 # ----------------------------------------------------
 MENU_1 = "1. 출장 정보 입력"
 MENU_2 = "2. 자금팀 연결 자료 생성"
 MENU_3 = "3. 출장비 산정 내역서 생성"
+
+MG_1 = "1. 출장 내역 조회"
+MG_2 = "2. 확정 등록"
+MG_3 = "3. 내역 수정·삭제"
 
 # 주의: 마크다운이 코드 블록으로 오인하지 않도록 HTML은 빈 줄/들여쓰기 없이 한 줄로 구성
 LOGO_SVG = (
@@ -310,35 +351,77 @@ SIDEBAR_BRAND_HTML = (
     "</div>"
     '<div class="hw-side-desc">화천기공 해외출장 경비 산정 &amp; 자금팀 정산 자동화 시스템</div>'
     "</div>"
-    '<div class="hw-side-caption">MENU</div>'
 )
+
+# 화면 상태: app_mode = home(메인) / calc(출장비 계산) / manage(해외출장관리)
+if "app_mode" not in st.session_state:
+    st.session_state.app_mode = "home"
+if "calc_menu" not in st.session_state:
+    st.session_state.calc_menu = MENU_1
+if "manage_menu" not in st.session_state:
+    st.session_state.manage_menu = MG_1
+
+
+def _go(mode, sub=None):
+    """버튼 클릭 시(화면 갱신 전에) 이동할 프로그램/메뉴를 저장"""
+    st.session_state.app_mode = mode
+    if sub is not None:
+        st.session_state[f"{mode}_menu"] = sub
+
+
+def _nav_button(label, key, active, mode, sub=None):
+    st.button(
+        label,
+        key=key,
+        type="primary" if active else "secondary",
+        use_container_width=True,
+        on_click=_go,
+        args=(mode, sub),
+    )
+
+
+mode = st.session_state.app_mode
 
 with st.sidebar:
     st.markdown(SIDEBAR_BRAND_HTML, unsafe_allow_html=True)
-    menu = st.radio(
-        "메뉴",
-        [MENU_1, MENU_2, MENU_3],
-        key="nav_menu",
-        label_visibility="collapsed",
-    )
+    _nav_button("홈", "nav_home", mode == "home", "home")
+    st.markdown('<div class="hw-side-caption">PROGRAMS</div>', unsafe_allow_html=True)
 
-# 페이지 상단 헤드
+    _nav_button("출장비 계산 프로그램", "nav_calc", mode == "calc", "calc")
+    if mode == "calc":
+        for i, label in enumerate([MENU_1, MENU_2, MENU_3], start=1):
+            _nav_button(label, f"sub_calc_{i}", st.session_state.calc_menu == label, "calc", label)
+
+    _nav_button("해외출장관리 프로그램", "nav_manage", mode == "manage", "manage")
+    if mode == "manage":
+        for i, label in enumerate([MG_1, MG_2, MG_3], start=1):
+            _nav_button(label, f"sub_manage_{i}", st.session_state.manage_menu == label, "manage", label)
+
+mode = st.session_state.app_mode
+menu = st.session_state.calc_menu if mode == "calc" else None
+mg_menu = st.session_state.manage_menu if mode == "manage" else None
+
+# 페이지 상단 헤드 (경로 · 제목)
 PAGE_HEAD = {
-    MENU_1: ("STEP 01", "출장 정보 입력", "출장자 정보와 경비 항목을 입력하고 등록합니다."),
-    MENU_2: ("STEP 02", "자금팀 연결 자료 생성", "등록된 출장 내역을 자금팀 제출용으로 집계합니다."),
-    MENU_3: ("STEP 03", "출장비 산정 내역서 생성", "출장자별 해외출장비 산정 내역서를 확인합니다."),
+    MENU_1: ("출장비 계산 프로그램", "STEP 01", "출장 정보 입력", "출장자 정보와 경비 항목을 입력하고 등록합니다."),
+    MENU_2: ("출장비 계산 프로그램", "STEP 02", "자금팀 연결 자료 생성", "등록된 출장 내역을 자금팀 제출용으로 집계합니다."),
+    MENU_3: ("출장비 계산 프로그램", "STEP 03", "출장비 산정 내역서 생성", "출장자별 해외출장비 산정 내역서를 확인합니다."),
+    MG_1: ("해외출장관리 프로그램", "MENU 01", "출장 내역 조회", "확정된 출장 내역을 기간·부서·출장자·목적별로 검색하고 집계합니다."),
+    MG_2: ("해외출장관리 프로그램", "MENU 02", "확정 등록", "결재 승인이 완료된 출장 내역을 확정 등록하여 기록합니다."),
+    MG_3: ("해외출장관리 프로그램", "MENU 03", "내역 수정·삭제", "확정 등록된 내역의 오류를 수정하거나 삭제합니다."),
 }
-_eyebrow, _title, _sub = PAGE_HEAD[menu]
-st.markdown(
-    f"""
-    <div class="hw-page-head">
-        <div class="hw-page-eyebrow">{_eyebrow}</div>
-        <div class="hw-page-title">{_title}</div>
-        <div class="hw-page-sub">{_sub}</div>
-    </div>
-    """,
-    unsafe_allow_html=True,
-)
+_head_key = menu if mode == "calc" else mg_menu
+if _head_key in PAGE_HEAD:
+    _crumb, _eyebrow, _title, _sub = PAGE_HEAD[_head_key]
+    st.markdown(
+        '<div class="hw-page-head">'
+        f'<div class="hw-crumb">HOME<i>&rsaquo;</i>{_crumb}<i>&rsaquo;</i><b>{_title}</b></div>'
+        f'<div class="hw-page-eyebrow">{_eyebrow}</div>'
+        f'<div class="hw-page-title">{_title}</div>'
+        f'<div class="hw-page-sub">{_sub}</div>'
+        "</div>",
+        unsafe_allow_html=True,
+    )
 
 # 세션 상태 초기화
 if "travel_list" not in st.session_state:
@@ -497,6 +580,7 @@ def process_travel_data(data_list):
             "직급": d.get("직급"),
             "직급구분": d.get("직급구분"),
             "출장지": d.get("출장지"),
+            "출장목적": d.get("출장목적구분"),
             "지역구분": d.get("지역구분"),
             "출장시작일": d.get("출장시작일"),
             "출장종료일": d.get("출장종료일"),
@@ -638,7 +722,7 @@ def build_fund_excel(records):
     for i, rec in enumerate(records, start=1):
         items, _, _, _ = calc_item_rows(rec)
         for cat, name, amt, payer in items:
-            vals = [i, rec["출장자성명"], rec["출장지"], cat, name, amt, payer]
+            vals = [r2 - 1, rec["출장자성명"], rec["출장지"], cat, name, amt, payer]
             for j, v in enumerate(vals, start=1):
                 c = ws2.cell(row=r2, column=j, value=v)
                 c.border = XL_BORDER
@@ -918,6 +1002,13 @@ def fill_statement_sheet(ws, rec):
         if r_total is not None and c_amt and r_hotel is not None and r_daily is not None:
             L = get_column_letter(c_amt)
             _put(ws, r_total.row, c_amt, f"={L}{r_hotel.row}+{L}{r_daily.row}", "#,##0")
+            try:
+                amt_cell = ws.cell(row=r_total.row, column=c_amt)
+                amt_cell.fill = copy(r_total.fill)  # '지급 총액' 라벨과 같은 셀 배경
+                lf = r_total.font
+                amt_cell.font = Font(name=lf.name, size=lf.sz, bold=True, color=lf.color)  # 굵은 글씨
+            except Exception:
+                pass
 
     # 3) 신청일
     d = _find_cell(ws, "신청일", startswith=True)
@@ -951,13 +1042,652 @@ def build_statement_excel(records, indices):
 
 
 # ----------------------------------------------------
+# 해외출장관리 프로그램 (확정된 출장 내역 기록 · 검색 · 관리)
+# ----------------------------------------------------
+# 확정 등록된 내역은 이 파이썬 파일과 같은 폴더의 'travel_records.db'(SQLite) 파일에 저장됩니다.
+# 파일을 복사해 두면 그대로 백업/이전할 수 있습니다.
+DB_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)), "travel_records.db")
+
+DEPARTMENT_LIST = [
+    "임원", "경영지원본부", "경영지원실", "인사지원팀", "관리팀", "재무전략실",
+    "노동조합", "재무팀", "자금팀", "정보실", "정보팀", "IBU", "성장전략실",
+    "프로젝트팀", "구매전략본부", "HTB 대만지사", "구매팀", "VI팀", "품질혁신본부",
+    "QM팀", "보전팀", "생산본부", "생산관리팀", "생산기술팀", "가공팀", "F/S가공",
+    "정밀가공", "가공지원", "UNIT팀", "UNIT준비", "UNIT조립", "UNIT서비스",
+    "생산1팀", "생산2팀", "서비스센터", "서비스1팀", "서비스2팀", "서비스3팀",
+    "서비스4팀", "기술개발연구소", "MC개발팀", "TC개발팀", "5축개발팀", "UNIT개발팀",
+    "제어개발팀", "제어SW개발팀", "가공기술1팀", "가공기술2팀", "소재사업부문", "기타",
+]
+
+POSITION_LIST = [
+    "사장", "부사장", "전무", "상무", "이사", "부장", "차장",
+    "과장", "대리", "계장", "사원", "1급기능장", "2급기능장",
+]
+
+PURPOSE_OPTIONS = [
+    "고객사 영업·상담",
+    "전시회·박람회 참관",
+    "설비 설치·시운전",
+    "A/S·기술지원",
+    "해외법인·지사 업무",
+    "구매·협력사 미팅",
+    "교육·연수",
+    "계약·협상",
+    "기타",
+]
+
+DATE_MIN = datetime.date(2000, 1, 1)
+DATE_MAX = datetime.date(2100, 12, 31)
+
+DB_FIELDS = [
+    "traveler", "dept", "position", "country", "start_date", "end_date", "nights", "days",
+    "purpose_cat", "purpose_detail", "emp_amount", "agency_amount", "total_amount",
+    "approved_date", "paid_date", "memo", "items_json",
+]
+
+# 화면/엑셀에 표시할 열 (DB 열 이름, 표시 이름)
+VIEW_COLS = [
+    ("traveler", "출장자"), ("dept", "부서"), ("position", "직급"), ("country", "출장지"),
+    ("start_date", "출장시작일"), ("end_date", "출장종료일"), ("period", "출장기간"),
+    ("purpose_cat", "출장목적"), ("purpose_detail", "목적상세"),
+    ("emp_amount", "직원_지급액"), ("agency_amount", "여행사_지급액"), ("total_amount", "총지급액"),
+    ("approved_date", "결재승인일"), ("paid_date", "지급일"), ("memo", "비고"),
+]
+MONEY_COLS = ["직원_지급액", "여행사_지급액", "총지급액"]
+
+
+def db_connect():
+    return sqlite3.connect(DB_PATH)
+
+
+def db_init():
+    with closing(db_connect()) as conn:
+        conn.execute(
+            """CREATE TABLE IF NOT EXISTS trips (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                traveler TEXT NOT NULL, dept TEXT, position TEXT, country TEXT,
+                start_date TEXT, end_date TEXT, nights INTEGER, days INTEGER,
+                purpose_cat TEXT, purpose_detail TEXT,
+                emp_amount INTEGER DEFAULT 0, agency_amount INTEGER DEFAULT 0, total_amount INTEGER DEFAULT 0,
+                approved_date TEXT, paid_date TEXT, memo TEXT, items_json TEXT, created_at TEXT
+            )"""
+        )
+        conn.commit()
+
+
+def db_insert(rec):
+    cols = DB_FIELDS + ["created_at"]
+    vals = [rec.get(c) for c in DB_FIELDS] + [datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")]
+    with closing(db_connect()) as conn:
+        conn.execute(
+            f"INSERT INTO trips ({','.join(cols)}) VALUES ({','.join('?' * len(cols))})", vals
+        )
+        conn.commit()
+
+
+def db_update(rid, rec):
+    sets = ",".join(f"{c}=?" for c in DB_FIELDS if c in rec)
+    vals = [rec[c] for c in DB_FIELDS if c in rec] + [rid]
+    with closing(db_connect()) as conn:
+        conn.execute(f"UPDATE trips SET {sets} WHERE id=?", vals)
+        conn.commit()
+
+
+def db_delete(rid):
+    with closing(db_connect()) as conn:
+        conn.execute("DELETE FROM trips WHERE id=?", (rid,))
+        conn.commit()
+
+
+def db_exists(traveler, start_date, end_date, country):
+    """같은 출장자·기간·출장지의 확정 내역이 이미 있는지 확인 (중복 등록 방지)"""
+    with closing(db_connect()) as conn:
+        row = conn.execute(
+            "SELECT id FROM trips WHERE traveler=? AND start_date=? AND end_date=? AND country=?",
+            (traveler, start_date, end_date, country),
+        ).fetchone()
+    return row[0] if row else None
+
+
+def db_load():
+    db_init()
+    with closing(db_connect()) as conn:
+        return pd.read_sql_query("SELECT * FROM trips ORDER BY start_date DESC, id DESC", conn)
+
+
+def trip_from_calc(rec, approved, paid, memo):
+    """계산 프로그램의 출장 1건 → 확정 등록용 레코드"""
+    row = process_travel_data([rec]).iloc[0]
+    items, _, _, _ = calc_item_rows(rec)
+    return {
+        "traveler": rec["출장자성명"],
+        "dept": rec["부서"],
+        "position": rec["직급"],
+        "country": rec["출장지"],
+        "start_date": rec["출장시작일"],
+        "end_date": rec["출장종료일"],
+        "nights": int(rec["출장박수"]),
+        "days": int(rec["출장일수"]),
+        "purpose_cat": rec.get("출장목적구분") or "기타",
+        "purpose_detail": rec.get("출장목적상세", ""),
+        "emp_amount": int(row["직원_지급액"]),
+        "agency_amount": int(row["여행사_지급액"]),
+        "total_amount": int(row["총출장비"]),
+        "approved_date": str(approved),
+        "paid_date": str(paid) if paid else "",
+        "memo": memo,
+        "items_json": json.dumps(
+            [{"구분": c, "항목": n, "금액": a, "지급처": p} for c, n, a, p in items], ensure_ascii=False
+        ),
+    }
+
+
+def trips_view(df):
+    """DB 조회 결과 → 화면/엑셀 표시용 표 (순번 1부터)"""
+    v = df.copy()
+    v["period"] = [f"{int(n)}박 {int(d)}일" for n, d in zip(v["nights"], v["days"])]
+    v = v[[c for c, _ in VIEW_COLS]].rename(columns=dict(VIEW_COLS))
+    v = v.fillna("")
+    v.index = range(1, len(v) + 1)
+    v.index.name = "순번"
+    return v
+
+
+def style_money(v, cols=None):
+    cols = cols or MONEY_COLS
+    return v.style.format({c: "{:,.0f}" for c in cols if c in v.columns})
+
+
+def build_trips_excel(view, cond_text):
+    """조회 결과 엑셀 (표 + 합계)"""
+    wb = openpyxl.Workbook()
+    ws = wb.active
+    ws.title = "해외출장 내역"
+    heads = ["순번"] + list(view.columns)
+    ncol = len(heads)
+    ws["A1"] = "해외출장 내역 조회 결과"
+    ws["A1"].font = Font(bold=True, size=16, color="005CAB")
+    ws.merge_cells(start_row=1, start_column=1, end_row=1, end_column=ncol)
+    ws["A2"] = f"조회 조건: {cond_text}  |  출력일: {datetime.date.today():%Y-%m-%d}"
+    ws["A2"].alignment = XL_LEFT
+    ws.merge_cells(start_row=2, start_column=1, end_row=2, end_column=ncol)
+
+    hr = 4
+    _xl_header(ws, hr, heads)
+    money_idx = [i for i, h in enumerate(heads, start=1) if h in MONEY_COLS]
+    for r, (no, row) in enumerate(view.iterrows(), start=hr + 1):
+        vals = [no] + list(row.values)
+        for j, v in enumerate(vals, start=1):
+            if hasattr(v, "item"):
+                v = v.item()
+            c = ws.cell(row=r, column=j, value=v)
+            c.border = XL_BORDER
+            if j in money_idx:
+                c.number_format = XL_NUM
+                c.alignment = XL_RIGHT
+            else:
+                c.alignment = XL_CENTER
+
+    first, last = hr + 1, hr + len(view)
+    tot = last + 1
+    ws.cell(row=tot, column=1, value="합 계")
+    for j in range(1, ncol + 1):
+        c = ws.cell(row=tot, column=j)
+        c.fill = XL_SUB_FILL
+        c.font = Font(bold=True)
+        c.border = XL_BORDER
+        c.alignment = XL_CENTER
+    for j in money_idx:
+        col = get_column_letter(j)
+        c = ws.cell(row=tot, column=j, value=f"=SUM({col}{first}:{col}{last})")
+        c.number_format = XL_NUM
+        c.alignment = XL_RIGHT
+    widths = {"순번": 7, "목적상세": 32, "비고": 24, "출장목적": 20, "부서": 16, "출장기간": 12}
+    _xl_widths(ws, [widths.get(h, 14) for h in heads])
+    ws.freeze_panes = ws.cell(row=hr + 1, column=1)
+    return _xl_bytes(wb)
+
+
+def _flash():
+    msg = st.session_state.pop("mg_flash", None)
+    if msg:
+        st.success(msg)
+
+
+def _money_input(label, value=0, key=None):
+    return st.number_input(label, min_value=0, value=int(value), step=1000, key=key)
+
+
+def _group_table(f, col, label):
+    g = (
+        f.groupby(col)
+        .agg(건수=("id", "count"), 직원_지급액=("emp_amount", "sum"), 여행사_지급액=("agency_amount", "sum"), 총지급액=("total_amount", "sum"))
+        .sort_values("총지급액", ascending=False)
+        .reset_index()
+        .rename(columns={col: label})
+    )
+    g.index = range(1, len(g) + 1)
+    g.index.name = "순번"
+    return g
+
+
+# ---------------- 1. 출장 내역 조회 ----------------
+def render_manage_search():
+    df = db_load()
+    if df.empty:
+        st.info("확정 등록된 출장 내역이 없습니다. '2. 확정 등록' 메뉴에서 먼저 등록해 주세요.")
+        return
+
+    d_min = datetime.date.fromisoformat(df["start_date"].min())
+    d_max = datetime.date.fromisoformat(df["end_date"].max())
+
+    st.markdown('<div class="hw-filter-title">검색 조건</div>', unsafe_allow_html=True)
+    c1, c2, c3 = st.columns([1, 1, 2])
+    with c1:
+        f_from = st.date_input("출장 기간 (시작)", value=d_min, min_value=DATE_MIN, max_value=DATE_MAX)
+    with c2:
+        f_to = st.date_input("출장 기간 (종료)", value=d_max, min_value=DATE_MIN, max_value=DATE_MAX)
+    with c3:
+        kw = st.text_input("키워드 검색", placeholder="출장자, 출장지, 목적 상세, 비고에서 검색")
+
+    c4, c5, c6, c7 = st.columns(4)
+    with c4:
+        f_dept = st.multiselect("부서", sorted(df["dept"].dropna().unique()))
+    with c5:
+        f_purpose = st.multiselect("출장 목적", sorted(df["purpose_cat"].dropna().unique()))
+    with c6:
+        f_name = st.multiselect("출장자", sorted(df["traveler"].dropna().unique()))
+    with c7:
+        f_country = st.multiselect("출장지", sorted(df["country"].dropna().unique()))
+    st.caption("출장 기간은 선택한 기간과 출장 일정이 하루라도 겹치는 내역을 조회합니다. 선택하지 않은 조건은 전체를 조회합니다.")
+
+    if f_from > f_to:
+        st.error("출장 기간의 시작일이 종료일보다 늦습니다.")
+        return
+
+    f = df.copy()
+    sd = pd.to_datetime(f["start_date"])
+    ed = pd.to_datetime(f["end_date"])
+    f = f[(sd <= pd.Timestamp(f_to)) & (ed >= pd.Timestamp(f_from))]
+    if f_dept:
+        f = f[f["dept"].isin(f_dept)]
+    if f_purpose:
+        f = f[f["purpose_cat"].isin(f_purpose)]
+    if f_name:
+        f = f[f["traveler"].isin(f_name)]
+    if f_country:
+        f = f[f["country"].isin(f_country)]
+    if kw.strip():
+        hay = (
+            f[["traveler", "dept", "position", "country", "purpose_cat", "purpose_detail", "memo"]]
+            .fillna("")
+            .astype(str)
+            .agg(" ".join, axis=1)
+        )
+        f = f[hay.str.contains(kw.strip(), case=False, regex=False)]
+
+    st.markdown("---")
+    m1, m2, m3, m4 = st.columns(4)
+    with m1:
+        st.metric("조회 건수", f"{len(f):,} 건")
+    with m2:
+        st.metric("총 지급액", f"{int(f['total_amount'].sum()):,} 원")
+    with m3:
+        st.metric("직원 지급액", f"{int(f['emp_amount'].sum()):,} 원")
+    with m4:
+        st.metric("여행사 지급액", f"{int(f['agency_amount'].sum()):,} 원")
+
+    if f.empty:
+        st.info("조건에 맞는 출장 내역이 없습니다.")
+        return
+
+    view = trips_view(f)
+    st.markdown("<br>", unsafe_allow_html=True)
+    st.dataframe(style_money(view), use_container_width=True)
+
+    cond = f"{f_from} ~ {f_to}"
+    for label, vals in (("부서", f_dept), ("목적", f_purpose), ("출장자", f_name), ("출장지", f_country)):
+        if vals:
+            cond += f" / {label}: {', '.join(vals)}"
+    if kw.strip():
+        cond += f" / 키워드: {kw.strip()}"
+    st.download_button(
+        "조회 결과 엑셀 다운로드",
+        data=build_trips_excel(view, cond),
+        file_name=f"해외출장내역_{datetime.date.today():%Y%m%d}.xlsx",
+        mime=XL_MIME,
+        use_container_width=True,
+    )
+
+    st.markdown("### 조회 결과 집계")
+    t1, t2, t3, t4 = st.tabs(["출장 목적별", "부서별", "출장자별", "출장지별"])
+    for tab, (col, label) in zip((t1, t2, t3, t4), (("purpose_cat", "출장 목적"), ("dept", "부서"), ("traveler", "출장자"), ("country", "출장지"))):
+        with tab:
+            g = _group_table(f, col, label)
+            st.dataframe(style_money(g, ["직원_지급액", "여행사_지급액", "총지급액"]), use_container_width=True)
+
+
+# ---------------- 2. 확정 등록 ----------------
+def render_manage_register():
+    _flash()
+    st.markdown("### 계산 결과 확정 등록")
+    st.caption("결재 승인이 완료된 출장 건을 선택해 확정 등록합니다. 같은 출장자·기간·출장지는 중복 등록되지 않습니다.")
+
+    recs = st.session_state.travel_list
+    if not recs:
+        st.info("계산된 출장 내역이 없습니다. '출장비 계산 프로그램'에서 출장 정보를 먼저 등록해 주세요. (과거 내역은 아래 '직접 입력으로 등록'을 이용하세요.)")
+    else:
+        dfp = process_travel_data(recs)
+        rows = []
+        pending = []
+        for i, r in enumerate(recs):
+            dup = db_exists(r["출장자성명"], r["출장시작일"], r["출장종료일"], r["출장지"])
+            if not dup:
+                pending.append(i)
+            rows.append(
+                {
+                    "출장자": r["출장자성명"],
+                    "부서": r["부서"],
+                    "출장지": r["출장지"],
+                    "출장기간": f'{r["출장시작일"]} ~ {r["출장종료일"]}',
+                    "출장목적": r.get("출장목적구분") or "-",
+                    "총 출장비": int(dfp.loc[i, "총출장비"]),
+                    "상태": "이미 등록됨" if dup else "등록 대기",
+                }
+            )
+        tbl = pd.DataFrame(rows)
+        tbl.index = range(1, len(tbl) + 1)
+        tbl.index.name = "순번"
+        st.dataframe(style_money(tbl, ["총 출장비"]), use_container_width=True)
+
+        sel = st.multiselect(
+            "확정 등록할 출장 건",
+            options=list(range(len(recs))),
+            default=pending,
+            format_func=lambda i: f"{i + 1}. {recs[i]['출장자성명']} ({recs[i]['출장지']}, {recs[i]['출장시작일']})",
+        )
+        c1, c2, c3 = st.columns([1, 1, 1])
+        with c1:
+            approved = st.date_input("결재 승인일", value=datetime.date.today(), min_value=DATE_MIN, max_value=DATE_MAX, key="mg_reg_approved")
+        with c2:
+            use_paid = st.checkbox("지급일 입력", value=False, key="mg_reg_use_paid")
+        with c3:
+            paid = st.date_input("지급일", value=datetime.date.today(), min_value=DATE_MIN, max_value=DATE_MAX, key="mg_reg_paid", disabled=not use_paid)
+        memo = st.text_input("비고 (선택)", key="mg_reg_memo")
+
+        reg_clicked = st.button("선택한 출장 건 확정 등록", use_container_width=True, key="mg_reg_btn")
+        if reg_clicked and not sel:
+            st.warning("확정 등록할 출장 건을 선택해 주세요. (이미 등록된 건은 선택 목록에서 제외됩니다.)")
+        elif reg_clicked:
+            ok, skipped = 0, 0
+            for i in sel:
+                r = recs[i]
+                if db_exists(r["출장자성명"], r["출장시작일"], r["출장종료일"], r["출장지"]):
+                    skipped += 1
+                    continue
+                db_insert(trip_from_calc(r, approved, paid if use_paid else None, memo))
+                ok += 1
+            msg = f"{ok}건을 확정 등록했습니다."
+            if skipped:
+                msg += f" (이미 등록된 {skipped}건은 제외)"
+            st.session_state.mg_flash = msg
+            st.rerun()
+
+    with st.expander("직접 입력으로 등록 (계산 프로그램을 거치지 않은 과거 내역)"):
+        with st.form("mg_manual_form", clear_on_submit=True):
+            a1, a2, a3 = st.columns(3)
+            with a1:
+                m_name = st.text_input("출장자 성명")
+            with a2:
+                m_dept = st.selectbox("부서", DEPARTMENT_LIST)
+            with a3:
+                m_pos = st.selectbox("직급", POSITION_LIST, index=POSITION_LIST.index("사원"))
+            b1, b2, b3 = st.columns(3)
+            with b1:
+                m_country = st.text_input("출장지(국가)")
+            with b2:
+                m_start = st.date_input("출장 시작일", value=datetime.date.today(), min_value=DATE_MIN, max_value=DATE_MAX)
+            with b3:
+                m_end = st.date_input("출장 종료일", value=datetime.date.today(), min_value=DATE_MIN, max_value=DATE_MAX)
+            p1, p2 = st.columns(2)
+            with p1:
+                m_pcat = st.selectbox("출장 목적 구분", PURPOSE_OPTIONS)
+            with p2:
+                m_pdetail = st.text_input("출장 목적 상세")
+            d1, d2 = st.columns(2)
+            with d1:
+                m_emp = _money_input("직원 지급액(원)")
+            with d2:
+                m_agency = _money_input("여행사 지급액(원)")
+            e1, e2 = st.columns(2)
+            with e1:
+                m_approved = st.date_input("결재 승인일", value=datetime.date.today(), min_value=DATE_MIN, max_value=DATE_MAX)
+            with e2:
+                m_memo = st.text_input("비고")
+            m_use_paid = st.checkbox("지급일 입력")
+            m_paid = st.date_input("지급일", value=datetime.date.today(), min_value=DATE_MIN, max_value=DATE_MAX)
+            submitted = st.form_submit_button("직접 등록")
+
+        if submitted:
+            if not m_name.strip() or not m_country.strip():
+                st.error("출장자 성명과 출장지는 필수 입력 항목입니다.")
+            elif m_end < m_start:
+                st.error("출장 종료일이 시작일보다 빠릅니다.")
+            elif db_exists(m_name.strip(), str(m_start), str(m_end), m_country.strip()):
+                st.warning("같은 출장자·기간·출장지의 내역이 이미 등록되어 있습니다.")
+            else:
+                days = (m_end - m_start).days + 1
+                db_insert(
+                    {
+                        "traveler": m_name.strip(), "dept": m_dept, "position": m_pos, "country": m_country.strip(),
+                        "start_date": str(m_start), "end_date": str(m_end),
+                        "nights": max(days - 1, 0), "days": days,
+                        "purpose_cat": m_pcat, "purpose_detail": m_pdetail,
+                        "emp_amount": int(m_emp), "agency_amount": int(m_agency), "total_amount": int(m_emp) + int(m_agency),
+                        "approved_date": str(m_approved), "paid_date": str(m_paid) if m_use_paid else "",
+                        "memo": m_memo, "items_json": "",
+                    }
+                )
+                st.session_state.mg_flash = f"[{m_name.strip()}] 님의 출장 내역을 직접 등록했습니다."
+                st.rerun()
+
+
+# ---------------- 3. 내역 수정·삭제 ----------------
+def render_manage_edit():
+    _flash()
+    df = db_load()
+    if df.empty:
+        st.info("확정 등록된 출장 내역이 없습니다.")
+        return
+
+    rid = st.selectbox(
+        "수정·삭제할 출장 내역",
+        df["id"].tolist(),
+        format_func=lambda i: (
+            lambda r: f"No.{int(r['id'])} · {r['traveler']} · {r['country']} · {r['start_date']} ~ {r['end_date']}"
+        )(df[df["id"] == i].iloc[0]),
+    )
+    row = df[df["id"] == rid].iloc[0]
+    rid = int(rid)
+
+    def _d(s, default):
+        try:
+            return datetime.date.fromisoformat(str(s))
+        except Exception:
+            return default
+
+    with st.form(f"mg_edit_form_{rid}"):
+        a1, a2, a3 = st.columns(3)
+        with a1:
+            e_name = st.text_input("출장자 성명", value=row["traveler"])
+        with a2:
+            e_dept = st.selectbox("부서", DEPARTMENT_LIST, index=DEPARTMENT_LIST.index(row["dept"]) if row["dept"] in DEPARTMENT_LIST else 0)
+        with a3:
+            e_pos = st.selectbox("직급", POSITION_LIST, index=POSITION_LIST.index(row["position"]) if row["position"] in POSITION_LIST else 0)
+        b1, b2, b3 = st.columns(3)
+        with b1:
+            e_country = st.text_input("출장지(국가)", value=row["country"])
+        with b2:
+            e_start = st.date_input("출장 시작일", value=_d(row["start_date"], datetime.date.today()), min_value=DATE_MIN, max_value=DATE_MAX)
+        with b3:
+            e_end = st.date_input("출장 종료일", value=_d(row["end_date"], datetime.date.today()), min_value=DATE_MIN, max_value=DATE_MAX)
+        p1, p2 = st.columns(2)
+        with p1:
+            e_pcat = st.selectbox("출장 목적 구분", PURPOSE_OPTIONS, index=PURPOSE_OPTIONS.index(row["purpose_cat"]) if row["purpose_cat"] in PURPOSE_OPTIONS else len(PURPOSE_OPTIONS) - 1)
+        with p2:
+            e_pdetail = st.text_input("출장 목적 상세", value=row["purpose_detail"] or "")
+        d1, d2 = st.columns(2)
+        with d1:
+            e_emp = _money_input("직원 지급액(원)", row["emp_amount"])
+        with d2:
+            e_agency = _money_input("여행사 지급액(원)", row["agency_amount"])
+        f1, f2 = st.columns(2)
+        with f1:
+            e_approved = st.date_input("결재 승인일", value=_d(row["approved_date"], datetime.date.today()), min_value=DATE_MIN, max_value=DATE_MAX)
+        with f2:
+            e_memo = st.text_input("비고", value=row["memo"] or "")
+        e_use_paid = st.checkbox("지급일 입력", value=bool(row["paid_date"]))
+        e_paid = st.date_input("지급일", value=_d(row["paid_date"], datetime.date.today()), min_value=DATE_MIN, max_value=DATE_MAX)
+        saved = st.form_submit_button("수정 내용 저장")
+
+    if saved:
+        if not e_name.strip() or not e_country.strip():
+            st.error("출장자 성명과 출장지는 필수 입력 항목입니다.")
+        elif e_end < e_start:
+            st.error("출장 종료일이 시작일보다 빠릅니다.")
+        else:
+            days = (e_end - e_start).days + 1
+            db_update(
+                rid,
+                {
+                    "traveler": e_name.strip(), "dept": e_dept, "position": e_pos, "country": e_country.strip(),
+                    "start_date": str(e_start), "end_date": str(e_end), "nights": max(days - 1, 0), "days": days,
+                    "purpose_cat": e_pcat, "purpose_detail": e_pdetail,
+                    "emp_amount": int(e_emp), "agency_amount": int(e_agency), "total_amount": int(e_emp) + int(e_agency),
+                    "approved_date": str(e_approved), "paid_date": str(e_paid) if e_use_paid else "", "memo": e_memo,
+                },
+            )
+            st.session_state.mg_flash = f"No.{rid} 내역을 수정했습니다."
+            st.rerun()
+
+    if row["items_json"]:
+        with st.expander("확정 당시 경비 항목 상세 보기"):
+            try:
+                items_df = pd.DataFrame(json.loads(row["items_json"]))
+                items_df.index = range(1, len(items_df) + 1)
+                items_df.index.name = "순번"
+                st.dataframe(style_money(items_df, ["금액"]), use_container_width=True)
+            except Exception:
+                st.caption("항목 상세를 불러올 수 없습니다.")
+
+    st.markdown("---")
+    st.markdown("### 내역 삭제")
+    confirm = st.checkbox("선택한 내역을 삭제하는 것에 동의합니다. (삭제 후에는 복구할 수 없습니다)", key=f"mg_del_chk_{rid}")
+    if st.button("선택한 내역 삭제", key=f"mg_del_btn_{rid}", disabled=not confirm):
+        db_delete(rid)
+        st.session_state.mg_flash = f"No.{rid} 내역을 삭제했습니다."
+        st.rerun()
+
+
+def render_manage(page):
+    try:
+        db_init()
+    except Exception as e:
+        st.error(f"출장 내역 저장 파일(travel_records.db)을 열 수 없습니다: {e}")
+        return
+    if page == MG_1:
+        render_manage_search()
+    elif page == MG_2:
+        render_manage_register()
+    elif page == MG_3:
+        render_manage_edit()
+
+
+# ---------------- 홈 (메인) ----------------
+ICON_CALC = (
+    '<svg viewBox="0 0 24 24" fill="none" stroke="#005CAB" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">'
+    '<rect x="4" y="2" width="16" height="20" rx="2"/><line x1="8" y1="6" x2="16" y2="6"/>'
+    '<line x1="16" y1="14" x2="16" y2="18"/>'
+    '<path d="M16 10h.01M12 10h.01M8 10h.01M12 14h.01M8 14h.01M12 18h.01M8 18h.01"/></svg>'
+)
+ICON_MANAGE = (
+    '<svg viewBox="0 0 24 24" fill="none" stroke="#005CAB" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">'
+    '<path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/>'
+    '<line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/><polyline points="10 9 9 9 8 9"/></svg>'
+)
+
+
+def _prog_card(tag, icon, title, desc, items, stat):
+    lis = "".join(f"<li>{t}</li>" for t in items)
+    return (
+        '<div class="hw-prog-card">'
+        f'<div class="hw-prog-top"><span class="hw-prog-tag">{tag}</span><span class="hw-prog-ico">{icon}</span></div>'
+        f'<div class="hw-prog-title">{title}</div>'
+        f'<div class="hw-prog-desc">{desc}</div>'
+        f'<ul class="hw-prog-list">{lis}</ul>'
+        f'<div class="hw-prog-stat">{stat}</div>'
+        "</div>"
+    )
+
+
+def render_home():
+    st.markdown(
+        '<div class="hw-hero">'
+        '<div class="hw-hero-eyebrow">HWACHEON OVERSEAS BUSINESS TRIP</div>'
+        '<div class="hw-hero-title">해외출장 업무 통합 시스템</div>'
+        '<div class="hw-hero-sub">출장비 산정부터 자금팀 정산 자료 생성, 확정된 출장 내역의 기록·검색까지<br>한 곳에서 처리합니다.</div>'
+        "</div>",
+        unsafe_allow_html=True,
+    )
+
+    n_calc = len(st.session_state.travel_list)
+    try:
+        trips = db_load()
+        n_conf, sum_conf = len(trips), int(trips["total_amount"].sum())
+    except Exception:
+        n_conf, sum_conf = 0, 0
+
+    left, right = st.columns(2, gap="large")
+    with left:
+        st.markdown(
+            _prog_card(
+                "PROGRAM 01", ICON_CALC, "해외출장비 계산 프로그램",
+                "출장자 정보와 환율을 입력해 일당·숙박비를 자동 산정하고, 자금팀 연결 자료와 출장비 산정 내역서를 엑셀로 생성합니다.",
+                ["출장 정보 입력 및 경비 자동 산정", "자금팀 연결 자료 엑셀 생성", "출장비 산정 내역서 엑셀 생성"],
+                f"현재 계산·등록된 출장 <b>{n_calc}</b>건",
+            ),
+            unsafe_allow_html=True,
+        )
+        st.button("출장비 계산 프로그램 실행", key="home_calc_btn", use_container_width=True, on_click=_go, args=("calc",))
+    with right:
+        st.markdown(
+            _prog_card(
+                "PROGRAM 02", ICON_MANAGE, "해외출장관리 프로그램",
+                "결재가 완료되어 확정된 출장 내역을 기록하고, 출장 목적·부서·출장자·기간별로 검색하고 집계합니다.",
+                ["계산 결과 확정 등록 및 이력 관리", "목적·부서·출장자·기간별 검색", "조회 결과 엑셀 추출"],
+                f"확정 등록된 출장 <b>{n_conf}</b>건 · 누적 지급액 <b>{sum_conf:,}</b>원",
+            ),
+            unsafe_allow_html=True,
+        )
+        st.button("해외출장관리 프로그램 실행", key="home_manage_btn", use_container_width=True, on_click=_go, args=("manage",))
+
+
+def render_footer():
+    st.markdown(
+        '<div class="hw-footer"><b>HWACHEON</b> 화천기공 해외출장 경비 산정 &amp; 자금팀 정산 자동화 시스템<br>'
+        "본 시스템은 사내 업무용입니다. 출장비 산정 기준은 해외출장 지급규정을 따릅니다.</div>",
+        unsafe_allow_html=True,
+    )
+
+
+# ----------------------------------------------------
 # 4. 페이지 구성 (사이드바 메뉴 선택에 따라 표시)
 # ----------------------------------------------------
 if menu == MENU_1:
-    st.markdown("### 📋 출장 기본 정보 입력")
+    st.markdown("### 출장 기본 정보 입력")
     if st.session_state.edit_target_index is not None:
         st.info(
-            f"✏️ 현재 **[인덱스 {st.session_state.edit_target_index}]** 번 출장 내역 수정 중입니다."
+            f"현재 **[인덱스 {st.session_state.edit_target_index}]** 번 출장 내역 수정 중입니다."
         )
 
     target_edit_data = None
@@ -968,16 +1698,7 @@ if menu == MENU_1:
             st.session_state.edit_target_index
         ]
 
-    department_list = [
-        "임원", "경영지원본부", "경영지원실", "인사지원팀", "관리팀", "재무전략실",
-        "노동조합", "재무팀", "자금팀", "정보실", "정보팀", "IBU", "성장전략실",
-        "프로젝트팀", "구매전략본부", "HTB 대만지사", "구매팀", "VI팀", "품질혁신본부",
-        "QM팀", "보전팀", "생산본부", "생산관리팀", "생산기술팀", "가공팀", "F/S가공",
-        "정밀가공", "가공지원", "UNIT팀", "UNIT준비", "UNIT조립", "UNIT서비스",
-        "생산1팀", "생산2팀", "서비스센터", "서비스1팀", "서비스2팀", "서비스3팀",
-        "서비스4팀", "기술개발연구소", "MC개발팀", "TC개발팀", "5축개발팀", "UNIT개발팀",
-        "제어개발팀", "제어SW개발팀", "가공기술1팀", "가공기술2팀", "소재사업부문", "기타",
-    ]
+    department_list = DEPARTMENT_LIST
 
     col_a, col_b = st.columns(2)
 
@@ -995,10 +1716,7 @@ if menu == MENU_1:
         )
         department = st.selectbox("부서", department_list, index=dept_idx)
 
-        position_list = [
-            "사장", "부사장", "전무", "상무", "이사", "부장", "차장",
-            "과장", "대리", "계장", "사원", "1급기능장", "2급기능장",
-        ]
+        position_list = POSITION_LIST
         default_pos = target_edit_data["직급"] if target_edit_data else "사원"
         pos_idx = (
             position_list.index(default_pos)
@@ -1081,12 +1799,12 @@ if menu == MENU_1:
     col_rate_info, col_rate_input = st.columns(2)
     with col_rate_info:
         st.markdown(
-            "🔗 [서울외국환중개 환율 조회 링크](http://www.smbs.biz/ExRate/TodayExRate.jsp)"
+            "[서울외국환중개 환율 조회 링크](http://www.smbs.biz/ExRate/TodayExRate.jsp)"
         )
         if is_jpy:
-            st.caption("🌐 위 링크에서 조회한 일본 엔화(JPY 100엔) 환율을 우측 칸에 입력해주세요.")
+            st.caption("위 링크에서 조회한 일본 엔화(JPY 100엔) 환율을 우측 칸에 입력해주세요.")
         else:
-            st.caption("🌐 위 링크에서 조회한 미국 달러(USD) 환율을 우측 칸에 입력해주세요.")
+            st.caption("위 링크에서 조회한 미국 달러(USD) 환율을 우측 칸에 입력해주세요.")
     with col_rate_input:
         exchange_rate = st.number_input(
             rate_label,
@@ -1095,6 +1813,22 @@ if menu == MENU_1:
             step=1.0,
             format="%.2f",
             key=rate_key,
+        )
+
+    # 출장 목적 (확정 등록 및 해외출장관리 검색에 사용)
+    col_p1, col_p2 = st.columns(2)
+    with col_p1:
+        _default_pc = (target_edit_data.get("출장목적구분") if target_edit_data else None) or PURPOSE_OPTIONS[0]
+        purpose_cat = st.selectbox(
+            "출장 목적 구분",
+            PURPOSE_OPTIONS,
+            index=PURPOSE_OPTIONS.index(_default_pc) if _default_pc in PURPOSE_OPTIONS else 0,
+        )
+    with col_p2:
+        purpose_detail = st.text_input(
+            "출장 목적 상세",
+            value=(target_edit_data.get("출장목적상세", "") if target_edit_data else ""),
+            placeholder="예) ○○사 5축 가공기 설치 및 시운전",
         )
 
     raw_days = (end_date - start_date).days + 1
@@ -1110,7 +1844,7 @@ if menu == MENU_1:
         if is_flight_minus:
             calculated_nights = max(0, calculated_nights - 1)
 
-        st.info(f"📅 최종 산정된 출장 기간: **{calculated_nights}박 {calculated_days}일**")
+        st.info(f"최종 산정된 출장 기간: **{calculated_nights}박 {calculated_days}일**")
 
     if target_edit_data and "loaded_edit_idx" not in st.session_state:
         st.session_state.transport_rows = target_edit_data.get(
@@ -1155,7 +1889,7 @@ if menu == MENU_1:
             st.session_state["te_amt_str_1"] = f"{auto_calc_daily:,}"
 
     st.markdown("---")
-    st.markdown("### 💵 금액 상세 입력")
+    st.markdown("### 금액 상세 입력")
 
     col_ratios = [1.2, 1.5, 2, 1.5]
 
@@ -1294,12 +2028,12 @@ if menu == MENU_1:
 
     b_c1, b_c2, b_c3 = st.columns([1.2, 2.5, 2.5])
     with b_c2:
-        if st.button("➕ 기타 행 추가", use_container_width=True):
+        if st.button("기타 행 추가", use_container_width=True):
             st.session_state.other_rows.append({"item": "", "amount": 0, "payer": "여행사"})
             st.rerun()
     with b_c3:
         if len(st.session_state.other_rows) > 1:
-            if st.button("➖ 기타 마지막 행 삭제", use_container_width=True):
+            if st.button("기타 마지막 행 삭제", use_container_width=True):
                 st.session_state.other_rows.pop()
                 st.rerun()
 
@@ -1315,12 +2049,12 @@ if menu == MENU_1:
         st.markdown(f"<div class='row-highlight-blue' style='text-align: right;'><b>{grand_total:,.0f} 원</b></div>", unsafe_allow_html=True)
 
     st.markdown("<br>", unsafe_allow_html=True)
-    btn_label = "🔄 수정 사항 반영하기" if st.session_state.edit_target_index is not None else "➕ 입력 내역 저장 및 등록"
+    btn_label = "수정 사항 반영하기" if st.session_state.edit_target_index is not None else "입력 내역 저장 및 등록"
     submitted = st.button(btn_label, use_container_width=True)
 
     if submitted:
         if not name or not country:
-            st.error("⚠️ 출장자 성명과 출장지는 필수 입력 항목입니다.")
+            st.error("출장자 성명과 출장지는 필수 입력 항목입니다.")
         else:
             new_data = {
                 "출장자성명": name,
@@ -1328,6 +2062,8 @@ if menu == MENU_1:
                 "직급": position,
                 "직급구분": position_group,
                 "출장지": country,
+                "출장목적구분": purpose_cat,
+                "출장목적상세": purpose_detail,
                 "지역구분": region_group,
                 "출장시작일": str(start_date),
                 "출장종료일": str(end_date),
@@ -1344,15 +2080,15 @@ if menu == MENU_1:
 
             if st.session_state.edit_target_index is not None:
                 st.session_state.travel_list[st.session_state.edit_target_index] = new_data
-                st.success(f"✅ [{name}] 님의 내역이 수정되었습니다.")
+                st.success(f"[{name}] 님의 내역이 수정되었습니다.")
                 st.session_state.edit_target_index = None
             else:
                 st.session_state.travel_list.append(new_data)
-                st.success(f"✅ [{name}] 님의 내역이 등록되었습니다.")
+                st.success(f"[{name}] 님의 내역이 등록되었습니다.")
             st.rerun()
 
     st.markdown("---")
-    st.markdown("### 📊 현재 등록된 출장 내역")
+    st.markdown("### 현재 등록된 출장 내역")
 
     if len(st.session_state.travel_list) > 0:
         raw_df = process_travel_data(st.session_state.travel_list)
@@ -1375,11 +2111,11 @@ if menu == MENU_1:
         col_del1, col_del2 = st.columns([1, 1])
         with col_del1:
             if st.session_state.edit_target_index is not None:
-                if st.button("❌ 수정 모드 취소"):
+                if st.button("수정 모드 취소"):
                     st.session_state.edit_target_index = None
                     st.rerun()
         with col_del2:
-            if st.button("🗑️ 전체 데이터 초기화"):
+            if st.button("전체 데이터 초기화"):
                 st.session_state.travel_list = []
                 st.session_state.edit_target_index = None
                 st.rerun()
@@ -1390,7 +2126,7 @@ if menu == MENU_1:
 # 메뉴 2 & 3 (자금팀 / 산정내역서) - 기존 기능 유지
 # ----------------------------------------------------
 elif menu == MENU_2:
-    st.markdown("### 💰 자금팀 제출용 정산 집계표")
+    st.markdown("### 자금팀 제출용 정산 집계표")
     if len(st.session_state.travel_list) > 0:
         processed_df = process_travel_data(st.session_state.travel_list)
         m1, m2, m3 = st.columns(3)
@@ -1411,7 +2147,7 @@ elif menu == MENU_2:
 
         st.markdown("<br>", unsafe_allow_html=True)
         st.download_button(
-            "📥 자금팀 연결 자료 엑셀 다운로드",
+            "자금팀 연결 자료 엑셀 다운로드",
             data=build_fund_excel(st.session_state.travel_list),
             file_name=f"자금팀_연결자료_{datetime.date.today():%Y%m%d}.xlsx",
             mime=XL_MIME,
@@ -1421,7 +2157,7 @@ elif menu == MENU_2:
         st.info("등록된 출장 내역이 없습니다. '1. 출장 정보 입력' 메뉴에서 먼저 등록해주세요.")
 
 elif menu == MENU_3:
-    st.markdown("### 📄 해외출장비 산정 내역서")
+    st.markdown("### 해외출장비 산정 내역서")
     if len(st.session_state.travel_list) > 0:
         processed_df = process_travel_data(st.session_state.travel_list)
         records = st.session_state.travel_list
@@ -1436,7 +2172,7 @@ elif menu == MENU_3:
         dl1, dl2 = st.columns(2)
         with dl1:
             st.download_button(
-                f"📥 [{selected_person}] 산정 내역서 엑셀 다운로드",
+                f"[{selected_person}] 산정 내역서 엑셀 다운로드",
                 data=build_statement_excel(records, [sel_idx]),
                 file_name=f"출장비_산정내역서_{selected_person}_{datetime.date.today():%Y%m%d}.xlsx",
                 mime=XL_MIME,
@@ -1444,7 +2180,7 @@ elif menu == MENU_3:
             )
         with dl2:
             st.download_button(
-                "📥 전체 출장자 일괄 다운로드 (출장자별 시트)",
+                "전체 출장자 일괄 다운로드 (출장자별 시트)",
                 data=build_statement_excel(records, list(range(len(records)))),
                 file_name=f"출장비_산정내역서_전체_{datetime.date.today():%Y%m%d}.xlsx",
                 mime=XL_MIME,
@@ -1452,3 +2188,13 @@ elif menu == MENU_3:
             )
     else:
         st.info("등록된 출장 내역이 없습니다. '1. 출장 정보 입력' 메뉴에서 먼저 등록해주세요.")
+
+# ----------------------------------------------------
+# 홈 / 해외출장관리 화면 및 공통 푸터
+# ----------------------------------------------------
+if mode == "home":
+    render_home()
+elif mode == "manage":
+    render_manage(mg_menu)
+
+render_footer()

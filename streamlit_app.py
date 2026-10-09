@@ -4,7 +4,6 @@ import platform
 import matplotlib
 import matplotlib.pyplot as plt
 import pandas as pd
-import requests
 from st_aggrid import AgGrid, GridOptionsBuilder, GridUpdateMode
 import streamlit as st
 import openpyxl
@@ -174,60 +173,13 @@ st.markdown(
         <div class="hwacheon-brand">
             <div>
                 <div class="hwacheon-logo-text">HWACHEON</div>
-                <div class="hwacheon-subtitle">화천기공 해외출장비 프로그램</div>
+                <div class="hwacheon-subtitle">화천기공 해외출장 경비 산정 & 자금팀 정산 자동화 시스템</div>
             </div>
         </div>
     </div>
     """,
     unsafe_allow_html=True,
 )
-
-# ----------------------------------------------------
-# 한국수출입은행 Open API 연동 함수
-# ----------------------------------------------------
-@st.cache_data(ttl=3600)
-def get_korea_exim_exchange_rate(authkey="YOUR_AUTH_KEY", search_date=None):
-    """
-    한국수출입은행 Open API를 호출하여 환율 데이터를 가져옵니다.
-    authkey: 수출입은행 Open API 인증키 (발급받은 키 적용)
-    """
-    if search_date is None:
-        search_date = datetime.date.today().strftime("%Y%m%d")
-
-    url = f"https://www.koreaexim.go.kr/site/program/financial/exchangeJSON?authkey={authkey}&searchdate={search_date}&data=AP01"
-    
-    try:
-        response = requests.get(url, timeout=5)
-        if response.status_code == 200:
-            data = response.json()
-            rates = {}
-            for item in data:
-                cur_unit = item.get("cur_unit")
-                # 서울외국환중개 매매기준율 우선 사용, 없을 경우 일반 매매기준율 사용
-                deal_bas_r = item.get("kftc_deal_bas_r") or item.get("deal_bas_r", "0")
-                deal_bas_r = deal_bas_r.replace(",", "")
-                rates[cur_unit] = float(deal_bas_r)
-            return rates
-    except Exception:
-        pass
-    return {}
-
-
-def get_auto_exchange_rate(region_group, authkey="YOUR_AUTH_KEY"):
-    """
-    지역구분에 따라 한국수출입은행 API에서 환율을 자동 추출합니다.
-    - '갑', '을', '병' -> USD (미국 달러)
-    - '특' -> JPY(100) (일본 100엔)
-    """
-    target_unit = "JPY(100)" if region_group == "특" else "USD"
-    default_fallback = 900.00 if region_group == "특" else 1345.30
-
-    rates = get_korea_exim_exchange_rate(authkey=authkey)
-    if rates and target_unit in rates and rates[target_unit] > 0:
-        return rates[target_unit]
-    
-    return default_fallback
-
 
 # 세션 상태 초기화
 if "travel_list" not in st.session_state:
@@ -429,6 +381,13 @@ with tab1:
             f"✏️ 현재 **[인덱스 {st.session_state.edit_target_index}]** 번 출장 내역 수정 중입니다."
         )
 
+    col_rate_info, col_rate_input = st.columns([2, 2])
+    with col_rate_info:
+        st.markdown(
+            "🔗 [서울외국환중개 환율 조회 링크](http://www.smbs.biz/ExRate/TodayExRate.jsp)"
+        )
+        st.caption("🌐 위 링크를 클릭하여 조회한 환율을 우측 칸에 직접 입력해주세요.")
+
     target_edit_data = None
     if st.session_state.edit_target_index is not None and len(
         st.session_state.travel_list
@@ -436,6 +395,19 @@ with tab1:
         target_edit_data = st.session_state.travel_list[
             st.session_state.edit_target_index
         ]
+
+    default_exchange_rate = (
+        target_edit_data["환율"] if target_edit_data else 1345.30
+    )
+
+    with col_rate_input:
+        exchange_rate = st.number_input(
+            "적용 환율 입력",
+            min_value=0.0,
+            value=float(default_exchange_rate),
+            step=1.0,
+            format="%.2f",
+        )
 
     department_list = [
         "임원", "경영지원본부", "경영지원실", "인사지원팀", "관리팀", "재무전략실",
@@ -526,37 +498,6 @@ with tab1:
         )
         region_group = st.selectbox(
             "지역 구분", region_options, index=default_reg_idx
-        )
-
-    # ----------------------------------------------------
-    # 한국수출입은행 환율 조회 링크 및 지역구분 자동 환율 적용
-    # ----------------------------------------------------
-    col_rate_info, col_rate_input = st.columns([2, 2])
-    with col_rate_info:
-        st.markdown(
-            "🔗 [한국수출입은행 환율 정보 바로가기](https://www.koreaexim.go.kr/site/main/index/001)"
-        )
-        st.caption("🌐 한국수출입은행 Open API를 통해 지역구분에 따른 실시간 환율을 자동 조회합니다.")
-
-    # 지역구분('갑','을','병' -> 미국 USD / '특' -> 일본 100엔)에 따라 자동 조회
-    auto_fetched_rate = get_auto_exchange_rate(region_group)
-
-    if region_group == "특":
-        rate_label = "적용 환율 입력 (엔화 - 100엔 기준)"
-    else:
-        rate_label = "적용 환율 입력 (달러 - 1달러 기준)"
-
-    default_exchange_rate = (
-        target_edit_data["환율"] if target_edit_data else auto_fetched_rate
-    )
-
-    with col_rate_input:
-        exchange_rate = st.number_input(
-            rate_label,
-            min_value=0.0,
-            value=float(default_exchange_rate),
-            step=1.0,
-            format="%.2f",
         )
 
     raw_days = (end_date - start_date).days + 1

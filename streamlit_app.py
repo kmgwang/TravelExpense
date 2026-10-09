@@ -1716,15 +1716,14 @@ def render_home():
         '<div class="hw-hero">'
         '<div class="hw-hero-eyebrow">HWACHEON OVERSEAS BUSINESS TRIP</div>'
         '<div class="hw-hero-title">해외출장 업무 통합 시스템</div>'
-        '<div class="hw-hero-sub">출장비 산정부터 자금팀 정산 자료 생성, 확정된 출장 내역의 기록·검색까지<br>한 곳에서 처리합니다.</div>'
-        "</div>",
+               "</div>",
         unsafe_allow_html=True,
     )
 
     left, right = st.columns(2, gap="large")
     with left:
         st.markdown(
-            _prog_card(ICON_CALC, "해외출장비 계산", "출장 정보를 입력해 출장비를 산정하고, 자금팀 자료와 산정 내역서를 엑셀로 생성합니다."),
+            _prog_card(ICON_CALC, "해외출장비 계산", "출장비를 산정하고, 자금팀 자료와 산정 내역서를 생성합니다."),
             unsafe_allow_html=True,
         )
         st.button("실행하기", key="home_calc_btn", use_container_width=True, on_click=_go, args=("calc",))

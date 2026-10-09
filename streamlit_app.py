@@ -521,6 +521,252 @@ def process_travel_data(data_list):
 
 
 # ----------------------------------------------------
+# 엑셀 생성 함수 (자금팀 연결 자료 / 출장비 산정 내역서)
+# ----------------------------------------------------
+from openpyxl.utils import get_column_letter
+
+_THIN = Side(style="thin", color="BFBFBF")
+XL_BORDER = Border(left=_THIN, right=_THIN, top=_THIN, bottom=_THIN)
+XL_HEADER_FILL = PatternFill("solid", fgColor="005CAB")
+XL_SUB_FILL = PatternFill("solid", fgColor="EAF2FA")
+XL_HEADER_FONT = Font(bold=True, color="FFFFFF")
+XL_CENTER = Alignment(horizontal="center", vertical="center", wrap_text=True)
+XL_LEFT = Alignment(horizontal="left", vertical="center", wrap_text=True)
+XL_RIGHT = Alignment(horizontal="right", vertical="center")
+XL_NUM = "#,##0"
+XL_MIME = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+
+
+def calc_item_rows(record):
+    """출장 1건의 (구분, 항목, 금액, 지급처, 비고) 목록과 산정 기준값을 반환"""
+    region = record["지역구분"]
+    pos_group = record["직급구분"]
+    std_daily, std_hotel = get_standard_rates(region, pos_group)
+    rate = record["환율"]
+    applied_rate = rate / 100.0 if region == "특" else rate
+    days = record.get("출장일수", 1)
+    nights = record.get("출장박수", 0)
+    cur = "JPY" if region == "특" else "USD"
+
+    calc_daily = int(std_daily * applied_rate * days // 1000 * 1000)
+    if std_hotel == "실비":
+        calc_hotel = 0
+    else:
+        calc_hotel = int(std_hotel * applied_rate * nights // 1000 * 1000)
+
+    rows = []
+    for t in record.get("교통비항목리스트", []):
+        rows.append(("교통비", t.get("item", ""), int(t.get("amount", 0)), t.get("payer", "여행사"), ""))
+
+    for te in record.get("출장비항목리스트", []):
+        name = te.get("item", "")
+        payer = te.get("payer", "출장자")
+        if "일당" in name:
+            amt = calc_daily
+            note = f"{cur} {std_daily:,} × 적용환율 {applied_rate:,.2f} × {days}일 (천원 미만 절사)"
+        elif "숙박" in name:
+            amt = calc_hotel
+            if std_hotel == "실비":
+                note = "실비 정산"
+            else:
+                note = f"{cur} {std_hotel:,} × 적용환율 {applied_rate:,.2f} × {nights}박 (천원 미만 절사)"
+        else:
+            amt = int(te.get("amount", 0))
+            note = ""
+        rows.append(("출장비", name, int(amt), payer, note))
+
+    for o in record.get("기타항목리스트", []):
+        if o.get("item") or o.get("amount"):
+            rows.append(("기타", o.get("item", ""), int(o.get("amount", 0)), o.get("payer", "여행사"), ""))
+
+    return rows, std_daily, std_hotel, cur
+
+
+def _xl_header(ws, row, headers, start_col=1):
+    for i, h in enumerate(headers):
+        c = ws.cell(row=row, column=start_col + i, value=h)
+        c.fill = XL_HEADER_FILL
+        c.font = XL_HEADER_FONT
+        c.alignment = XL_CENTER
+        c.border = XL_BORDER
+
+
+def _xl_widths(ws, widths):
+    for i, w in enumerate(widths, start=1):
+        ws.column_dimensions[get_column_letter(i)].width = w
+
+
+def _xl_bytes(wb):
+    buf = io.BytesIO()
+    wb.save(buf)
+    return buf.getvalue()
+
+
+def build_fund_excel(records):
+    """2. 자금팀 연결 자료 엑셀 (정산 집계표 + 항목별 상세)"""
+    df = process_travel_data(records)
+    wb = openpyxl.Workbook()
+
+    # ---- 시트 1: 정산 집계표 ----
+    ws = wb.active
+    ws.title = "자금팀 정산 집계표"
+    ws["A1"] = "해외출장비 자금팀 정산 집계표"
+    ws["A1"].font = Font(bold=True, size=16, color="005CAB")
+    ws.merge_cells("A1:I1")
+    ws["A2"] = f"작성일: {datetime.date.today():%Y-%m-%d}"
+    ws["A2"].alignment = XL_RIGHT
+    ws.merge_cells("A2:I2")
+
+    headers = ["순번", "출장자", "부서", "직급", "출장지", "출장 기간", "출장자 계좌입금액(원)", "여행사 지급액(원)", "총 출장비(원)"]
+    hr = 4
+    _xl_header(ws, hr, headers)
+    for i, (_, r) in enumerate(df.iterrows(), start=1):
+        row = hr + i
+        vals = [
+            i, r["출장자성명"], r["부서"], r["직급"], r["출장지"],
+            f'{r["출장시작일"]} ~ {r["출장종료일"]}',
+            int(r["직원_계좌입금액"]), int(r["여행사_지급액"]), int(r["총출장비"]),
+        ]
+        for j, v in enumerate(vals, start=1):
+            c = ws.cell(row=row, column=j, value=v)
+            c.border = XL_BORDER
+            if j >= 7:
+                c.number_format = XL_NUM
+                c.alignment = XL_RIGHT
+            else:
+                c.alignment = XL_CENTER
+
+    first, last = hr + 1, hr + len(df)
+    tot = last + 1
+    ws.cell(row=tot, column=1, value="합 계")
+    ws.merge_cells(start_row=tot, start_column=1, end_row=tot, end_column=6)
+    for j in range(1, 10):
+        c = ws.cell(row=tot, column=j)
+        c.fill = XL_SUB_FILL
+        c.font = Font(bold=True)
+        c.border = XL_BORDER
+        c.alignment = XL_CENTER if j < 7 else XL_RIGHT
+    for j in (7, 8, 9):
+        col = get_column_letter(j)
+        c = ws.cell(row=tot, column=j, value=f"=SUM({col}{first}:{col}{last})")
+        c.number_format = XL_NUM
+    _xl_widths(ws, [7, 12, 16, 10, 14, 24, 22, 20, 18])
+    ws.freeze_panes = ws.cell(row=hr + 1, column=1)
+
+    # ---- 시트 2: 항목별 상세 ----
+    ws2 = wb.create_sheet("항목별 상세")
+    _xl_header(ws2, 1, ["순번", "출장자", "출장지", "구분", "항목", "금액(원)", "지급처"])
+    r2 = 2
+    for i, rec in enumerate(records, start=1):
+        items, _, _, _ = calc_item_rows(rec)
+        for cat, name, amt, payer, _note in items:
+            vals = [i, rec["출장자성명"], rec["출장지"], cat, name, amt, payer]
+            for j, v in enumerate(vals, start=1):
+                c = ws2.cell(row=r2, column=j, value=v)
+                c.border = XL_BORDER
+                c.alignment = XL_RIGHT if j == 6 else XL_CENTER
+                if j == 6:
+                    c.number_format = XL_NUM
+            r2 += 1
+    _xl_widths(ws2, [7, 12, 14, 10, 24, 16, 12])
+    ws2.freeze_panes = "A2"
+
+    return _xl_bytes(wb)
+
+
+def _fill_statement_sheet(ws, rec):
+    items, std_daily, std_hotel, cur = calc_item_rows(rec)
+    jpy = rec["지역구분"] == "특"
+
+    ws["A1"] = "해외출장비 산정 내역서"
+    ws["A1"].font = Font(bold=True, size=16, color="005CAB")
+    ws.merge_cells("A1:E1")
+    ws["A2"] = f"작성일: {datetime.date.today():%Y-%m-%d}"
+    ws["A2"].alignment = XL_RIGHT
+    ws.merge_cells("A2:E2")
+
+    info = [
+        ("출장자 성명", rec["출장자성명"]),
+        ("부서 / 직급", f'{rec["부서"]} / {rec["직급"]} ({rec["직급구분"]})'),
+        ("출장지 / 지역구분", f'{rec["출장지"]} / {rec["지역구분"]}지역'),
+        ("출장 기간", f'{rec["출장시작일"]} ~ {rec["출장종료일"]} ({rec["출장박수"]}박 {rec["출장일수"]}일)'),
+        ("적용 환율", f'{cur} {rec["환율"]:,.2f}원' + (" (100엔 기준)" if jpy else " (1달러 기준)")),
+        ("일당 기준", f"{cur} {std_daily:,} / 일"),
+        ("숙박비 기준", "실비" if std_hotel == "실비" else f"{cur} {std_hotel:,} / 박"),
+    ]
+    row = 4
+    for label, value in info:
+        a = ws.cell(row=row, column=1, value=label)
+        a.fill = XL_SUB_FILL
+        a.font = Font(bold=True)
+        a.alignment = XL_CENTER
+        a.border = XL_BORDER
+        ws.cell(row=row, column=2, value=value)
+        ws.merge_cells(start_row=row, start_column=2, end_row=row, end_column=5)
+        for j in range(2, 6):
+            ws.cell(row=row, column=j).border = XL_BORDER
+        ws.cell(row=row, column=2).alignment = XL_LEFT
+        row += 1
+
+    row += 1
+    _xl_header(ws, row, ["구분", "항목", "금액(원)", "지급처", "산정 근거 / 비고"])
+    first = row + 1
+    for cat, name, amt, payer, note in items:
+        row += 1
+        vals = [cat, name, amt, payer, note]
+        for j, v in enumerate(vals, start=1):
+            c = ws.cell(row=row, column=j, value=v)
+            c.border = XL_BORDER
+            if j == 3:
+                c.number_format = XL_NUM
+                c.alignment = XL_RIGHT
+            elif j == 5:
+                c.alignment = XL_LEFT
+            else:
+                c.alignment = XL_CENTER
+    last = row
+
+    row += 2
+    summary = [
+        ("출장자 계좌입금액", f'=SUMIF(D{first}:D{last},"<>여행사",C{first}:C{last})'),
+        ("여행사 지급액", f'=SUMIF(D{first}:D{last},"여행사",C{first}:C{last})'),
+        ("총 출장 경비", f"=SUM(C{first}:C{last})"),
+    ]
+    for k, (label, formula) in enumerate(summary):
+        a = ws.cell(row=row, column=1, value=label)
+        ws.merge_cells(start_row=row, start_column=1, end_row=row, end_column=2)
+        v = ws.cell(row=row, column=3, value=formula)
+        v.number_format = XL_NUM
+        v.alignment = XL_RIGHT
+        for j in (1, 2, 3):
+            c = ws.cell(row=row, column=j)
+            c.border = XL_BORDER
+            c.fill = XL_SUB_FILL
+            c.font = Font(bold=True, color="005CAB" if k == 2 else "000000")
+        a.alignment = XL_CENTER
+        row += 1
+
+    _xl_widths(ws, [20, 26, 18, 14, 60])
+
+
+def build_statement_excel(records, indices):
+    """3. 출장비 산정 내역서 엑셀 (선택한 출장자별 시트)"""
+    wb = openpyxl.Workbook()
+    wb.remove(wb.active)
+    used = set()
+    for i in indices:
+        rec = records[i]
+        base = "".join(ch for ch in f'{i + 1}_{rec["출장자성명"]}' if ch not in '[]:*?/\\')[:31]
+        title, n = base, 1
+        while title in used:
+            n += 1
+            title = f"{base[:28]}_{n}"
+        used.add(title)
+        _fill_statement_sheet(wb.create_sheet(title), rec)
+    return _xl_bytes(wb)
+
+
+# ----------------------------------------------------
 # 4. 페이지 구성 (사이드바 메뉴 선택에 따라 표시)
 # ----------------------------------------------------
 if menu == MENU_1:
@@ -530,13 +776,6 @@ if menu == MENU_1:
             f"✏️ 현재 **[인덱스 {st.session_state.edit_target_index}]** 번 출장 내역 수정 중입니다."
         )
 
-    col_rate_info, col_rate_input = st.columns([2, 2])
-    with col_rate_info:
-        st.markdown(
-            "🔗 [서울외국환중개 환율 조회 링크](http://www.smbs.biz/ExRate/TodayExRate.jsp)"
-        )
-        st.caption("🌐 위 링크를 클릭하여 조회한 환율을 우측 칸에 직접 입력해주세요.")
-
     target_edit_data = None
     if st.session_state.edit_target_index is not None and len(
         st.session_state.travel_list
@@ -544,19 +783,6 @@ if menu == MENU_1:
         target_edit_data = st.session_state.travel_list[
             st.session_state.edit_target_index
         ]
-
-    default_exchange_rate = (
-        target_edit_data["환율"] if target_edit_data else 1345.30
-    )
-
-    with col_rate_input:
-        exchange_rate = st.number_input(
-            "적용 환율 입력",
-            min_value=0.0,
-            value=float(default_exchange_rate),
-            step=1.0,
-            format="%.2f",
-        )
 
     department_list = [
         "임원", "경영지원본부", "경영지원실", "인사지원팀", "관리팀", "재무전략실",
@@ -647,6 +873,44 @@ if menu == MENU_1:
         )
         region_group = st.selectbox(
             "지역 구분", region_options, index=default_reg_idx
+        )
+
+    # ------------------------------------------------
+    # 환율 입력 (지역 구분에 따라 통화 자동 전환)
+    #   갑/을/병 → 미국 달러(USD, 1달러 기준)
+    #   특       → 일본 엔화(JPY, 100엔 기준)
+    # ------------------------------------------------
+    is_jpy = region_group == "특"
+    if is_jpy:
+        rate_label = "적용 환율 입력 (일본 엔화 JPY · 100엔 기준)"
+        rate_key = "exchange_rate_jpy"
+        rate_fallback = 900.00
+    else:
+        rate_label = "적용 환율 입력 (미국 달러 USD · 1달러 기준)"
+        rate_key = "exchange_rate_usd"
+        rate_fallback = 1345.30
+
+    default_exchange_rate = rate_fallback
+    if target_edit_data and (target_edit_data.get("지역구분") == "특") == is_jpy:
+        default_exchange_rate = target_edit_data["환율"]
+
+    col_rate_info, col_rate_input = st.columns(2)
+    with col_rate_info:
+        st.markdown(
+            "🔗 [서울외국환중개 환율 조회 링크](http://www.smbs.biz/ExRate/TodayExRate.jsp)"
+        )
+        if is_jpy:
+            st.caption("🌐 위 링크에서 조회한 일본 엔화(JPY 100엔) 환율을 우측 칸에 입력해주세요.")
+        else:
+            st.caption("🌐 위 링크에서 조회한 미국 달러(USD) 환율을 우측 칸에 입력해주세요.")
+    with col_rate_input:
+        exchange_rate = st.number_input(
+            rate_label,
+            min_value=0.0,
+            value=float(default_exchange_rate),
+            step=1.0,
+            format="%.2f",
+            key=rate_key,
         )
 
     raw_days = (end_date - start_date).days + 1
@@ -948,6 +1212,15 @@ elif menu == MENU_2:
             st.metric(label="총 직원 계좌 입금액", value=f"{processed_df['직원_계좌입금액'].sum():,.0f} 원")
 
         st.dataframe(processed_df[["출장자성명", "부서", "직급", "출장지", "직원_계좌입금액", "여행사_지급액", "총출장비"]], use_container_width=True)
+
+        st.markdown("<br>", unsafe_allow_html=True)
+        st.download_button(
+            "📥 자금팀 연결 자료 엑셀 다운로드",
+            data=build_fund_excel(st.session_state.travel_list),
+            file_name=f"자금팀_연결자료_{datetime.date.today():%Y%m%d}.xlsx",
+            mime=XL_MIME,
+            use_container_width=True,
+        )
     else:
         st.info("등록된 출장 내역이 없습니다. '1. 출장 정보 입력' 메뉴에서 먼저 등록해주세요.")
 
@@ -955,7 +1228,31 @@ elif menu == MENU_3:
     st.markdown("### 📄 해외출장비 산정 내역서")
     if len(st.session_state.travel_list) > 0:
         processed_df = process_travel_data(st.session_state.travel_list)
-        selected_person = st.selectbox("출장자 선택", processed_df["출장자성명"].unique())
+        records = st.session_state.travel_list
+        sel_idx = st.selectbox(
+            "출장자 선택",
+            list(range(len(records))),
+            format_func=lambda i: f"{i + 1}. {records[i]['출장자성명']} ({records[i]['출장지']}, {records[i]['출장시작일']})",
+        )
+        selected_person = records[sel_idx]["출장자성명"]
         st.success(f"[{selected_person}] 님의 해외출장 산정 내역서가 준비되었습니다.")
+
+        dl1, dl2 = st.columns(2)
+        with dl1:
+            st.download_button(
+                f"📥 [{selected_person}] 산정 내역서 엑셀 다운로드",
+                data=build_statement_excel(records, [sel_idx]),
+                file_name=f"출장비_산정내역서_{selected_person}_{datetime.date.today():%Y%m%d}.xlsx",
+                mime=XL_MIME,
+                use_container_width=True,
+            )
+        with dl2:
+            st.download_button(
+                "📥 전체 출장자 일괄 다운로드 (출장자별 시트)",
+                data=build_statement_excel(records, list(range(len(records)))),
+                file_name=f"출장비_산정내역서_전체_{datetime.date.today():%Y%m%d}.xlsx",
+                mime=XL_MIME,
+                use_container_width=True,
+            )
     else:
         st.info("등록된 출장 내역이 없습니다. '1. 출장 정보 입력' 메뉴에서 먼저 등록해주세요.")

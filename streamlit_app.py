@@ -119,18 +119,18 @@ st.markdown(
 
     /* 사이드바 상단 브랜드 영역 (로고 + 시스템 설명 문구) */
     .hw-side-brand {
-        padding: 18px 8px 22px 8px;
+        padding: 18px 8px 22px 8px; text-align: center;
         border-bottom: 1px solid var(--hw-line);
         margin-bottom: 18px;
     }
-    .hw-side-logo { display: flex; align-items: center; gap: 12px; }
-    .hw-side-logo svg { width: 100%; max-width: 168px; height: auto; }
+    .hw-side-logo { display: flex; align-items: center; justify-content: center; gap: 12px; }
+    .hw-side-logo svg { width: 100%; max-width: 168px; height: auto; margin: 0 auto; }
     .hw-side-logo-text {
         font-size: 20px; font-weight: 800; letter-spacing: 1.2px;
         color: var(--hw-blue); line-height: 1;
     }
     .hw-side-desc {
-        font-size: 12.5px; color: var(--hw-text-sub); line-height: 1.6; margin-top: 14px;
+        font-size: 12.5px; color: var(--hw-text-sub); line-height: 1.6; margin-top: 14px; text-align: center;
     }
     .hw-side-prog {
         font-size: 21px; font-weight: 800; letter-spacing: -0.5px; color: var(--hw-text);
@@ -319,8 +319,8 @@ MENU_1 = "1. 출장 정보 입력"
 MENU_2 = "2. 자금팀 연결 자료 생성"
 MENU_3 = "3. 출장비 산정 내역서 생성"
 
-MG_1 = "1. 확정 등록"
-MG_2 = "2. 출장 내역 관리"
+MG_1 = "1. 출장 내역 등록"
+MG_2 = "2. 출장 내역 조회 및 관리"
 
 # 주의: 마크다운이 코드 블록으로 오인하지 않도록 HTML은 빈 줄/들여쓰기 없이 한 줄로 구성
 LOGO_SVG = (
@@ -402,8 +402,8 @@ PAGE_HEAD = {
     MENU_1: ("해외출장비 계산", "STEP 01", "출장 정보 입력", "출장자 정보와 경비 항목을 입력하고 등록합니다."),
     MENU_2: ("해외출장비 계산", "STEP 02", "자금팀 연결 자료 생성", "등록된 출장 내역을 자금팀 제출용으로 집계합니다."),
     MENU_3: ("해외출장비 계산", "STEP 03", "출장비 산정 내역서 생성", "출장자별 해외출장비 산정 내역서를 확인합니다."),
-    MG_1: ("해외출장 내역관리", "MENU 01", "확정 등록", "결재 승인이 완료된 출장 내역을 확정 등록하여 기록합니다."),
-    MG_2: ("해외출장 내역관리", "MENU 02", "출장 내역 관리", "확정된 출장 내역을 검색·집계하고, 오류가 있는 내역은 수정하거나 삭제합니다."),
+    MG_1: ("해외출장 내역관리", "MENU 01", "출장 내역 등록", "등록 대기 중인 출장 내역을 확정 등록하여 DB에 기록합니다."),
+    MG_2: ("해외출장 내역관리", "MENU 02", "출장 내역 조회 및 관리", "확정된 출장 내역을 검색·집계하고, 내역을 더블클릭하면 출장비 계산 당시 입력 내용을 확인합니다."),
 }
 _head_key = menu if mode == "calc" else mg_menu
 if _head_key in PAGE_HEAD:
@@ -1084,7 +1084,7 @@ DATE_MAX = datetime.date(2100, 12, 31)
 DB_FIELDS = [
     "traveler", "dept", "position", "country", "start_date", "end_date", "nights", "days",
     "purpose_cat", "purpose_detail", "emp_amount", "agency_amount", "total_amount",
-    "approved_date", "paid_date", "memo", "items_json",
+    "approved_date", "paid_date", "memo", "items_json", "calc_json",
 ]
 
 # 화면/엑셀에 표시할 열 (DB 열 이름, 표시 이름)
@@ -1111,9 +1111,13 @@ def db_init():
                 start_date TEXT, end_date TEXT, nights INTEGER, days INTEGER,
                 purpose_cat TEXT, purpose_detail TEXT,
                 emp_amount INTEGER DEFAULT 0, agency_amount INTEGER DEFAULT 0, total_amount INTEGER DEFAULT 0,
-                approved_date TEXT, paid_date TEXT, memo TEXT, items_json TEXT, created_at TEXT
+                approved_date TEXT, paid_date TEXT, memo TEXT, items_json TEXT, created_at TEXT,
+                calc_json TEXT
             )"""
         )
+        cols = [r[1] for r in conn.execute("PRAGMA table_info(trips)").fetchall()]
+        if "calc_json" not in cols:  # 이전 버전 DB 파일 보완
+            conn.execute("ALTER TABLE trips ADD COLUMN calc_json TEXT")
         conn.commit()
 
 
@@ -1181,6 +1185,8 @@ def trip_from_calc(rec, approved, paid, memo):
         "items_json": json.dumps(
             [{"구분": c, "항목": n, "금액": a, "지급처": p} for c, n, a, p in items], ensure_ascii=False
         ),
+        # 출장비 계산 당시 입력한 데이터 전체 (더블클릭 상세 조회용)
+        "calc_json": json.dumps(rec, ensure_ascii=False, default=str),
     }
 
 
@@ -1273,50 +1279,106 @@ def _group_table(f, col, label):
     return g
 
 
-# ---------------- 출장 내역 조회 ----------------
+# ---------------- 출장 내역 조회 및 관리 ----------------
+def _selected_rows(sel):
+    if sel is None:
+        return []
+    if isinstance(sel, pd.DataFrame):
+        return sel.to_dict("records")
+    return list(sel)
+
+
+def render_trip_detail(row):
+    """DB에 저장된 출장 1건의 상세 (출장비 계산 당시 입력 데이터)"""
+    st.markdown('<div class="hw-filter-title">출장 상세 내역 (출장비 계산 당시 입력 데이터)</div>', unsafe_allow_html=True)
+    rec = None
+    try:
+        if row.get("calc_json"):
+            rec = json.loads(row["calc_json"])
+    except Exception:
+        rec = None
+
+    info = {
+        "출장자": row["traveler"], "부서": row["dept"], "직급": row["position"], "출장지": row["country"],
+        "출장 기간": f'{row["start_date"]} ~ {row["end_date"]} ({int(row["nights"])}박 {int(row["days"])}일)',
+        "출장 목적": f'{row["purpose_cat"] or "-"}' + (f' / {row["purpose_detail"]}' if row["purpose_detail"] else ""),
+        "결재승인일": row["approved_date"] or "-", "지급일": row["paid_date"] or "-", "비고": row["memo"] or "-",
+    }
+    if rec:
+        info["직급 구분"] = rec.get("직급구분", "-")
+        info["지역 구분"] = rec.get("지역구분", "-")
+        info["적용 환율"] = f'{float(rec.get("환율", 0)):,.2f}' + (" (100엔 기준)" if rec.get("지역구분") == "특" else "")
+    keys = list(info.keys())
+    for i in range(0, len(keys), 3):
+        cols = st.columns(3)
+        for c, k in zip(cols, keys[i:i + 3]):
+            with c:
+                st.markdown(f"<div style='font-size:12px;color:#6B7280'>{k}</div><div style='font-weight:700;margin-bottom:10px'>{info[k]}</div>", unsafe_allow_html=True)
+
+    if rec:
+        items, _, _, _ = calc_item_rows(rec)
+        if items:
+            t = pd.DataFrame(items, columns=["구분", "항목", "금액(원)", "지급처"])
+            t.index = range(1, len(t) + 1)
+            t.index.name = "순번"
+            st.dataframe(style_money(t, ["금액(원)"]), use_container_width=True)
+    else:
+        try:
+            its = json.loads(row["items_json"]) if row["items_json"] else []
+        except Exception:
+            its = []
+        if its:
+            t = pd.DataFrame(its)
+            t.index = range(1, len(t) + 1)
+            t.index.name = "순번"
+            st.dataframe(style_money(t, ["금액"]), use_container_width=True)
+        else:
+            st.caption("직접 입력으로 등록된 내역이라 항목별 상세 데이터가 없습니다.")
+    m1, m2, m3 = st.columns(3)
+    with m1:
+        st.metric("직원 지급액", f"{int(row['emp_amount']):,} 원")
+    with m2:
+        st.metric("여행사 지급액", f"{int(row['agency_amount']):,} 원")
+    with m3:
+        st.metric("총 지급액", f"{int(row['total_amount']):,} 원")
+
+
 def render_manage_search():
+    _flash()
     df = db_load()
     if df.empty:
-        st.info("확정 등록된 출장 내역이 없습니다. '1. 확정 등록' 메뉴에서 먼저 등록해 주세요.")
-        return None
+        st.info("확정 등록된 출장 내역이 없습니다. '1. 출장 내역 등록' 메뉴에서 먼저 등록해 주세요.")
+        return
+    df = df.sort_values(["start_date", "id"], ascending=[False, False]).reset_index(drop=True)
 
-    d_min = datetime.date.fromisoformat(df["start_date"].min())
-    d_max = datetime.date.fromisoformat(df["end_date"].max())
     opts = {
         "mg_f_dept": sorted(df["dept"].dropna().unique()),
         "mg_f_purpose": sorted(df["purpose_cat"].dropna().unique()),
         "mg_f_name": sorted(df["traveler"].dropna().unique()),
         "mg_f_country": sorted(df["country"].dropna().unique()),
     }
-
-    # 등록된 데이터의 기간 범위가 바뀌면 기간 초기값을 새 범위로 맞춤
-    if st.session_state.get("mg_db_range") != (d_min, d_max):
-        st.session_state.mg_db_range = (d_min, d_max)
-        st.session_state.mg_f_from = d_min
-        st.session_state.mg_f_to = d_max
-    # 목록에서 사라진 선택값 정리
+    # 날짜는 기본적으로 비워 둠 / 목록에서 사라진 선택값 정리
+    st.session_state.setdefault("mg_f_from", None)
+    st.session_state.setdefault("mg_f_to", None)
+    st.session_state.setdefault("mg_kw", "")
     for k, o in opts.items():
         st.session_state[k] = [v for v in st.session_state.get(k, []) if v in o]
-    st.session_state.setdefault("mg_kw", "")
 
-    def _reset_filters(lo, hi):
-        st.session_state.mg_f_from = lo
-        st.session_state.mg_f_to = hi
+    def _reset_all():
+        st.session_state.mg_f_from = None
+        st.session_state.mg_f_to = None
         st.session_state.mg_kw = ""
         for k in opts:
             st.session_state[k] = []
-
-    def _reset_all(lo, hi):
-        _reset_filters(lo, hi)
         st.session_state.mg_applied = None
+        st.session_state.mg_detail_id = None
 
     st.markdown('<div class="hw-filter-title">검색 조건</div>', unsafe_allow_html=True)
-
     c1, c2, c3 = st.columns([1, 1, 2])
     with c1:
-        f_from = st.date_input("출장 기간 (시작)", min_value=DATE_MIN, max_value=DATE_MAX, key="mg_f_from")
+        f_from = st.date_input("출장 기간 (시작)", value=None, min_value=DATE_MIN, max_value=DATE_MAX, key="mg_f_from")
     with c2:
-        f_to = st.date_input("출장 기간 (종료)", min_value=DATE_MIN, max_value=DATE_MAX, key="mg_f_to")
+        f_to = st.date_input("출장 기간 (종료)", value=None, min_value=DATE_MIN, max_value=DATE_MAX, key="mg_f_to")
     with c3:
         kw = st.text_input("키워드 검색", key="mg_kw")
 
@@ -1329,34 +1391,36 @@ def render_manage_search():
         f_name = st.multiselect("출장자", opts["mg_f_name"], key="mg_f_name", placeholder=" ")
     with c7:
         f_country = st.multiselect("출장지", opts["mg_f_country"], key="mg_f_country", placeholder=" ")
-    st.caption("출장 기간은 선택한 기간과 출장 일정이 하루라도 겹치는 내역을 조회합니다. 선택하지 않은 조건은 전체를 조회하며, 조건 설정 후 '검색' 버튼을 눌러야 조회됩니다.")
+    st.caption("조건을 설정하지 않으면 전체 내역이 출장 시작일 최신순으로 표시됩니다. 조건 설정 후 '검색' 버튼을 눌러야 조건이 적용됩니다. 출장 기간은 일정이 하루라도 겹치는 내역을 조회합니다.")
 
-    bc1, bc2, bc3 = st.columns([1, 1, 4])
+    bc1, bc2, _sp = st.columns([1, 1, 4])
     with bc1:
         do_search = st.button("검색", key="mg_search_btn", type="primary", use_container_width=True)
     with bc2:
-        st.button("초기화", key="mg_reset_btn", on_click=_reset_all, args=(d_min, d_max), use_container_width=True)
+        st.button("초기화", key="mg_reset_btn", on_click=_reset_all, use_container_width=True)
 
     if do_search:
-        if f_from > f_to:
+        st.session_state.mg_detail_id = None
+        if f_from and f_to and f_from > f_to:
             st.session_state.mg_applied = None
             st.error("출장 기간의 시작일이 종료일보다 늦습니다.")
-            return None
+            return
         st.session_state.mg_applied = {
             "from": f_from, "to": f_to, "kw": kw,
             "dept": list(f_dept), "purpose": list(f_purpose), "name": list(f_name), "country": list(f_country),
         }
-    ap = st.session_state.get("mg_applied")
-    if not ap:
-        st.info("검색 조건을 설정한 뒤 '검색' 버튼을 눌러 주세요.")
-        return None
+    ap = st.session_state.get("mg_applied") or {"from": None, "to": None, "kw": "", "dept": [], "purpose": [], "name": [], "country": []}
     f_from, f_to, kw = ap["from"], ap["to"], ap["kw"]
     f_dept, f_purpose, f_name, f_country = ap["dept"], ap["purpose"], ap["name"], ap["country"]
 
     f = df.copy()
     sd = pd.to_datetime(f["start_date"])
     ed = pd.to_datetime(f["end_date"])
-    f = f[(sd <= pd.Timestamp(f_to)) & (ed >= pd.Timestamp(f_from))]
+    if f_to:
+        f = f[sd <= pd.Timestamp(f_to)]
+        ed = ed[f.index]
+    if f_from:
+        f = f[ed.loc[f.index] >= pd.Timestamp(f_from)]
     if f_dept:
         f = f[f["dept"].isin(f_dept)]
     if f_purpose:
@@ -1387,18 +1451,50 @@ def render_manage_search():
 
     if f.empty:
         st.info("조건에 맞는 출장 내역이 없습니다.")
-        return f
+        return
 
     view = trips_view(f)
-    st.markdown("<br>", unsafe_allow_html=True)
-    st.dataframe(style_money(view), use_container_width=True)
+    grid_df = view.reset_index()
+    grid_df["id"] = f["id"].astype(int).values
+    st.caption("내역을 더블클릭하면 아래에 출장비 계산 당시 입력했던 데이터가 표시됩니다.")
+    gb = GridOptionsBuilder.from_dataframe(grid_df)
+    gb.configure_selection(selection_mode="single", use_checkbox=False, suppressRowClickSelection=True)
+    gb.configure_default_column(minWidth=110, resizable=True)
+    gb.configure_column("순번", minWidth=90, maxWidth=100)
+    gb.configure_column("id", hide=True)
+    num_fmt = JsCode(
+        "function(p){ if (p.value === null || p.value === undefined || p.value === '') { return ''; }"
+        " var n = Number(p.value); return isNaN(n) ? p.value : n.toLocaleString('ko-KR'); }"
+    )
+    gb.configure_columns(MONEY_COLS, valueFormatter=num_fmt, cellStyle={"textAlign": "right"}, minWidth=130)
+    go = gb.build()
+    go["onRowDoubleClicked"] = JsCode("function(e){ e.api.deselectAll(); e.node.setSelected(true); }")
+    resp = AgGrid(
+        grid_df,
+        gridOptions=go,
+        update_mode=GridUpdateMode.SELECTION_CHANGED,
+        fit_columns_on_grid_load=True,
+        height=380,
+        theme="alpine",
+        allow_unsafe_jscode=True,
+        key="mg_grid",
+    )
+    picked = _selected_rows(resp.get("selected_rows") if hasattr(resp, "get") else resp["selected_rows"])
+    if picked:
+        st.session_state.mg_detail_id = int(picked[0]["id"])
+    did = st.session_state.get("mg_detail_id")
+    if did is not None and did in set(f["id"].astype(int)):
+        st.markdown("---")
+        render_trip_detail(f[f["id"] == did].iloc[0])
+        st.button("상세 닫기", key="mg_detail_close", on_click=lambda: st.session_state.update(mg_detail_id=None))
 
-    cond = f"{f_from} ~ {f_to}"
+    cond = f"{f_from or '전체'} ~ {f_to or '전체'}"
     for label, vals in (("부서", f_dept), ("목적", f_purpose), ("출장자", f_name), ("출장지", f_country)):
         if vals:
             cond += f" / {label}: {', '.join(vals)}"
     if kw.strip():
         cond += f" / 키워드: {kw.strip()}"
+    st.markdown("<br>", unsafe_allow_html=True)
     st.download_button(
         "조회 결과 엑셀 다운로드",
         data=build_trips_excel(view, cond),
@@ -1413,26 +1509,27 @@ def render_manage_search():
         with tab:
             g = _group_table(f, col, label)
             st.dataframe(style_money(g, ["직원_지급액", "여행사_지급액", "총지급액"]), use_container_width=True)
-    return f
 
 
 # ---------------- 확정 등록 ----------------
 def render_manage_register():
     _flash()
     st.markdown("### 계산 결과 확정 등록")
-    st.caption("결재 승인이 완료된 출장 건을 선택해 확정 등록합니다. 같은 출장자·기간·출장지는 중복 등록되지 않습니다.")
+    st.caption("해외출장비 계산에서 입력한 출장 중 아직 확정 등록하지 않은(등록 대기) 건만 표시됩니다. 확정 등록하면 '2. 출장 내역 조회 및 관리'에서 조회·관리됩니다.")
 
     recs = st.session_state.travel_list
+    pending = [i for i, r in enumerate(recs) if not db_exists(r["출장자성명"], r["출장시작일"], r["출장종료일"], r["출장지"])]
     if not recs:
         st.info("계산된 출장 내역이 없습니다. '해외출장비 계산'에서 출장 정보를 먼저 등록해 주세요. (과거 내역은 아래 '직접 입력으로 등록'을 이용하세요.)")
+    elif not pending:
+        st.info("등록 대기 중인 출장 내역이 없습니다. 확정 등록된 내역은 '2. 출장 내역 조회 및 관리'에서 확인할 수 있습니다.")
     else:
         dfp = process_travel_data(recs)
+        today = datetime.date.today()
         rows = []
-        pending = []
-        for i, r in enumerate(recs):
-            dup = db_exists(r["출장자성명"], r["출장시작일"], r["출장종료일"], r["출장지"])
-            if not dup:
-                pending.append(i)
+        for i in pending:
+            r = recs[i]
+            overdue = datetime.date.fromisoformat(r["출장시작일"]) <= today
             rows.append(
                 {
                     "출장자": r["출장자성명"],
@@ -1441,7 +1538,7 @@ def render_manage_register():
                     "출장기간": f'{r["출장시작일"]} ~ {r["출장종료일"]}',
                     "출장목적": r.get("출장목적구분") or "-",
                     "총 출장비": int(dfp.loc[i, "총출장비"]),
-                    "상태": "이미 등록됨" if dup else "등록 대기",
+                    "상태": "등록 지연(출발일 경과)" if overdue else "등록 대기",
                 }
             )
         tbl = pd.DataFrame(rows)
@@ -1451,7 +1548,7 @@ def render_manage_register():
 
         sel = st.multiselect(
             "확정 등록할 출장 건",
-            options=list(range(len(recs))),
+            options=pending,
             default=pending,
             format_func=lambda i: f"{i + 1}. {recs[i]['출장자성명']} ({recs[i]['출장지']}, {recs[i]['출장시작일']})",
         )
@@ -1466,7 +1563,7 @@ def render_manage_register():
 
         reg_clicked = st.button("선택한 출장 건 확정 등록", use_container_width=True, key="mg_reg_btn")
         if reg_clicked and not sel:
-            st.warning("확정 등록할 출장 건을 선택해 주세요. (이미 등록된 건은 선택 목록에서 제외됩니다.)")
+            st.warning("확정 등록할 출장 건을 선택해 주세요.")
         elif reg_clicked:
             ok, skipped = 0, 0
             for i in sel:
@@ -1541,106 +1638,6 @@ def render_manage_register():
                 st.rerun()
 
 
-# ---------------- 내역 수정·삭제 ----------------
-def render_manage_edit(found=None):
-    _flash()
-    df = db_load()
-    if df.empty:
-        return
-    if found is None or found.empty:
-        st.info("위에서 검색한 뒤, 조회된 내역 중에서 수정·삭제할 건을 선택할 수 있습니다.")
-        return
-    df = df[df["id"].isin(found["id"])]
-
-    rid = st.selectbox(
-        "수정·삭제할 출장 내역",
-        df["id"].tolist(),
-        format_func=lambda i: (
-            lambda r: f"No.{int(r['id'])} · {r['traveler']} · {r['country']} · {r['start_date']} ~ {r['end_date']}"
-        )(df[df["id"] == i].iloc[0]),
-    )
-    row = df[df["id"] == rid].iloc[0]
-    rid = int(rid)
-
-    def _d(s, default):
-        try:
-            return datetime.date.fromisoformat(str(s))
-        except Exception:
-            return default
-
-    with st.form(f"mg_edit_form_{rid}"):
-        a1, a2, a3 = st.columns(3)
-        with a1:
-            e_name = st.text_input("출장자 성명", value=row["traveler"])
-        with a2:
-            e_dept = st.selectbox("부서", DEPARTMENT_LIST, index=DEPARTMENT_LIST.index(row["dept"]) if row["dept"] in DEPARTMENT_LIST else 0)
-        with a3:
-            e_pos = st.selectbox("직급", POSITION_LIST, index=POSITION_LIST.index(row["position"]) if row["position"] in POSITION_LIST else 0)
-        b1, b2, b3 = st.columns(3)
-        with b1:
-            e_country = st.text_input("출장지(국가)", value=row["country"])
-        with b2:
-            e_start = st.date_input("출장 시작일", value=_d(row["start_date"], datetime.date.today()), min_value=DATE_MIN, max_value=DATE_MAX)
-        with b3:
-            e_end = st.date_input("출장 종료일", value=_d(row["end_date"], datetime.date.today()), min_value=DATE_MIN, max_value=DATE_MAX)
-        p1, p2 = st.columns(2)
-        with p1:
-            e_pcat = st.selectbox("출장 목적 구분", PURPOSE_OPTIONS, index=PURPOSE_OPTIONS.index(row["purpose_cat"]) if row["purpose_cat"] in PURPOSE_OPTIONS else len(PURPOSE_OPTIONS) - 1)
-        with p2:
-            e_pdetail = st.text_input("출장 목적 상세", value=row["purpose_detail"] or "")
-        d1, d2 = st.columns(2)
-        with d1:
-            e_emp = _money_input("직원 지급액(원)", row["emp_amount"])
-        with d2:
-            e_agency = _money_input("여행사 지급액(원)", row["agency_amount"])
-        f1, f2 = st.columns(2)
-        with f1:
-            e_approved = st.date_input("결재 승인일", value=_d(row["approved_date"], datetime.date.today()), min_value=DATE_MIN, max_value=DATE_MAX)
-        with f2:
-            e_memo = st.text_input("비고", value=row["memo"] or "")
-        e_use_paid = st.checkbox("지급일 입력", value=bool(row["paid_date"]))
-        e_paid = st.date_input("지급일", value=_d(row["paid_date"], datetime.date.today()), min_value=DATE_MIN, max_value=DATE_MAX)
-        saved = st.form_submit_button("수정 내용 저장")
-
-    if saved:
-        if not e_name.strip() or not e_country.strip():
-            st.error("출장자 성명과 출장지는 필수 입력 항목입니다.")
-        elif e_end < e_start:
-            st.error("출장 종료일이 시작일보다 빠릅니다.")
-        else:
-            days = (e_end - e_start).days + 1
-            db_update(
-                rid,
-                {
-                    "traveler": e_name.strip(), "dept": e_dept, "position": e_pos, "country": e_country.strip(),
-                    "start_date": str(e_start), "end_date": str(e_end), "nights": max(days - 1, 0), "days": days,
-                    "purpose_cat": e_pcat, "purpose_detail": e_pdetail,
-                    "emp_amount": int(e_emp), "agency_amount": int(e_agency), "total_amount": int(e_emp) + int(e_agency),
-                    "approved_date": str(e_approved), "paid_date": str(e_paid) if e_use_paid else "", "memo": e_memo,
-                },
-            )
-            st.session_state.mg_flash = f"No.{rid} 내역을 수정했습니다."
-            st.rerun()
-
-    if row["items_json"]:
-        with st.expander("확정 당시 경비 항목 상세 보기"):
-            try:
-                items_df = pd.DataFrame(json.loads(row["items_json"]))
-                items_df.index = range(1, len(items_df) + 1)
-                items_df.index.name = "순번"
-                st.dataframe(style_money(items_df, ["금액"]), use_container_width=True)
-            except Exception:
-                st.caption("항목 상세를 불러올 수 없습니다.")
-
-    st.markdown("---")
-    st.markdown("### 내역 삭제")
-    confirm = st.checkbox("선택한 내역을 삭제하는 것에 동의합니다. (삭제 후에는 복구할 수 없습니다)", key=f"mg_del_chk_{rid}")
-    if st.button("선택한 내역 삭제", key=f"mg_del_btn_{rid}", disabled=not confirm):
-        db_delete(rid)
-        st.session_state.mg_flash = f"No.{rid} 내역을 삭제했습니다."
-        st.rerun()
-
-
 def render_manage(page):
     try:
         db_init()
@@ -1650,10 +1647,7 @@ def render_manage(page):
     if page == MG_1:
         render_manage_register()
     elif page == MG_2:
-        found = render_manage_search()
-        st.markdown("---")
-        st.markdown('<div class="hw-filter-title">내역 수정·삭제</div>', unsafe_allow_html=True)
-        render_manage_edit(found)
+        render_manage_search()
 
 
 # ---------------- 홈 (메인) ----------------
@@ -1680,7 +1674,44 @@ def _prog_card(icon, title, desc):
     )
 
 
+def overdue_pending():
+    """출발일 00시가 지났는데(출발일 <= 오늘) 아직 확정 등록하지 않은 출장 내역 목록"""
+    try:
+        db_init()
+    except Exception:
+        return []
+    today = datetime.date.today()
+    out = []
+    for i, r in enumerate(st.session_state.travel_list):
+        try:
+            sd = datetime.date.fromisoformat(r["출장시작일"])
+        except Exception:
+            continue
+        if sd <= today and not db_exists(r["출장자성명"], r["출장시작일"], r["출장종료일"], r["출장지"]):
+            out.append((i, r, (today - sd).days))
+    return sorted(out, key=lambda x: x[1]["출장시작일"])
+
+
+def render_alerts():
+    items = overdue_pending()
+    _sp, bell = st.columns([5, 1.4])
+    with bell:
+        with st.popover(f"알림 {len(items)}" if items else "알림", icon=":material/notifications:", use_container_width=True):
+            if not items:
+                st.caption("확인할 알림이 없습니다.")
+            else:
+                st.markdown(f"**확정 등록이 필요한 출장 {len(items)}건**")
+                st.caption("출발일이 지났지만 아직 확정 등록하지 않은 출장 내역입니다.")
+                for _i, r, late in items:
+                    st.markdown(
+                        f"- **{r['출장자성명']}** · {r['출장지']} · 출발 {r['출장시작일']}"
+                        + (f" (출발 {late}일 경과)" if late > 0 else " (오늘 출발)")
+                    )
+                st.button("출장 내역 등록으로 이동", key="alert_go_reg", use_container_width=True, on_click=_go, args=("manage", MG_1))
+
+
 def render_home():
+    render_alerts()
     st.markdown(
         '<div class="hw-hero">'
         '<div class="hw-hero-eyebrow">HWACHEON OVERSEAS BUSINESS TRIP</div>'
@@ -2131,7 +2162,7 @@ if menu == MENU_1:
         gb.configure_selection(selection_mode="single", use_checkbox=False)
         # 열 폭이 좁아 값이 잘리지 않도록 최소 폭 지정(넘치면 가로 스크롤)
         gb.configure_default_column(minWidth=110, resizable=True)
-        gb.configure_column("순번", minWidth=70, maxWidth=80)
+        gb.configure_column("순번", minWidth=90, maxWidth=100)
         # 숫자 열은 천단위 콤마 표시 + 오른쪽 정렬
         num_fmt = JsCode(
             "function(p){ if (p.value === null || p.value === undefined || p.value === '') { return ''; }"
@@ -2172,7 +2203,22 @@ if menu == MENU_1:
 elif menu == MENU_2:
     st.markdown("### 자금팀 제출용 정산 집계표")
     if len(st.session_state.travel_list) > 0:
-        processed_df = process_travel_data(st.session_state.travel_list)
+        _recs_all = st.session_state.travel_list
+        _all_df = process_travel_data(_recs_all)
+        fund_sel = st.multiselect(
+            "자료를 생성할 출장 내역 선택",
+            options=list(range(len(_recs_all))),
+            default=list(range(len(_recs_all))),
+            format_func=lambda i: f"{i + 1}. {_recs_all[i]['출장자성명']} ({_recs_all[i]['출장지']}, {_recs_all[i]['출장시작일']} ~ {_recs_all[i]['출장종료일']})",
+            key=f"fund_sel_{len(_recs_all)}",
+            placeholder=" ",
+        )
+        if not fund_sel:
+            st.info("자료를 생성할 출장 내역을 한 건 이상 선택해 주세요.")
+            render_footer()
+            st.stop()
+        fund_recs = [_recs_all[i] for i in fund_sel]
+        processed_df = process_travel_data(fund_recs)
         m1, m2, m3 = st.columns(3)
         with m1:
             st.metric(label="총 출장 건수", value=f"{len(processed_df)} 건")
@@ -2192,7 +2238,7 @@ elif menu == MENU_2:
         st.markdown("<br>", unsafe_allow_html=True)
         st.download_button(
             "자금팀 연결 자료 엑셀 다운로드",
-            data=build_fund_excel(st.session_state.travel_list),
+            data=build_fund_excel(fund_recs),
             file_name=f"자금팀_연결자료_{datetime.date.today():%Y%m%d}.xlsx",
             mime=XL_MIME,
             use_container_width=True,

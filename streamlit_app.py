@@ -346,7 +346,7 @@ SIDEBAR_BRAND_HTML = (
     '<div class="hw-side-logo">'
     + LOGO_SVG
     + "</div>"
-    '<div class="hw-side-desc">화천기공 해외출장 프로그램</div>'
+    '<div class="hw-side-desc">해외출장 업무 통합 시스템</div>'
     "</div>"
 )
 
@@ -1771,7 +1771,7 @@ def render_home():
         '<div class="hw-hero">'
         '<div class="hw-hero-eyebrow">HWACHEON OVERSEAS BUSINESS TRIP</div>'
         '<div class="hw-hero-title">해외출장 업무 통합 시스템</div>'
-        '<div class="hw-hero-sub">출장비 산정부터 자금팀 정산 자료 생성, 확정된 출장 내역의 기록·검색까지<br>한 곳에서 처리합니다.</div>'
+        '<div class="hw-hero-sub">해외출장 발생 시 출장비 산정부터 자금팀 정산 자료 생성, <br>확정된 출장 내역의 기록·검색까지 한 곳에서 처리합니다.</div>'
         "</div>",
         unsafe_allow_html=True,
     )

@@ -1,5 +1,7 @@
+import base64
 import datetime
 import io
+import os
 import platform
 import matplotlib
 import matplotlib.pyplot as plt
@@ -462,12 +464,7 @@ def process_travel_data(data_list):
         for te in d.get("출장비항목리스트", []):
             item_name = te.get("item", "")
             payer = te.get("payer", "출장자")
-            if "일당" in item_name:
-                amt = calc_daily
-            elif "숙박" in item_name:
-                amt = calc_hotel
-            else:
-                amt = te.get("amount", 0)
+            amt = te.get("amount", 0)
 
             if payer == "여행사":
                 agency_total += amt
@@ -490,7 +487,7 @@ def process_travel_data(data_list):
             else:
                 employee_total += o_amt
 
-        d["직원_계좌입금액"] = employee_total
+        d["직원_지급액"] = employee_total
         d["여행사_지급액"] = agency_total
         d["총출장비"] = employee_total + agency_total
 
@@ -506,7 +503,7 @@ def process_travel_data(data_list):
             "출장박수": d.get("출장박수"),
             "출장일수": d.get("출장일수"),
             "환율": d.get("환율"),
-            "직원_계좌입금액": d.get("직원_계좌입금액"),
+            "직원_지급액": d.get("직원_지급액"),
             "여행사_지급액": d.get("여행사_지급액"),
             "총출장비": d.get("총출장비"),
             "교통비항목리스트": d.get("교통비항목리스트"),
@@ -523,6 +520,7 @@ def process_travel_data(data_list):
 # ----------------------------------------------------
 # 엑셀 생성 함수 (자금팀 연결 자료 / 출장비 산정 내역서)
 # ----------------------------------------------------
+import openpyxl.worksheet.properties
 from openpyxl.utils import get_column_letter
 
 _THIN = Side(style="thin", color="BFBFBF")
@@ -537,47 +535,27 @@ XL_NUM = "#,##0"
 XL_MIME = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
 
 
-def calc_item_rows(record):
-    """출장 1건의 (구분, 항목, 금액, 지급처, 비고) 목록과 산정 기준값을 반환"""
-    region = record["지역구분"]
-    pos_group = record["직급구분"]
-    std_daily, std_hotel = get_standard_rates(region, pos_group)
-    rate = record["환율"]
-    applied_rate = rate / 100.0 if region == "특" else rate
-    days = record.get("출장일수", 1)
-    nights = record.get("출장박수", 0)
-    cur = "JPY" if region == "특" else "USD"
+def payer_display(payer, rec):
+    """지급처 표시명: '출장자'는 1번 메뉴에서 입력한 출장자 성명으로 대체"""
+    if payer == "출장자":
+        return (rec.get("출장자성명") or "").strip() or "출장자"
+    return payer
 
-    calc_daily = int(std_daily * applied_rate * days // 1000 * 1000)
-    if std_hotel == "실비":
-        calc_hotel = 0
-    else:
-        calc_hotel = int(std_hotel * applied_rate * nights // 1000 * 1000)
+
+def calc_item_rows(record):
+    """출장 1건의 (구분, 항목, 금액, 지급처) 목록과 지급 기준값을 반환 (금액은 입력한 값 그대로 사용)"""
+    region = record["지역구분"]
+    std_daily, std_hotel = get_standard_rates(region, record["직급구분"])
+    cur = "JPY" if region == "특" else "USD"
 
     rows = []
     for t in record.get("교통비항목리스트", []):
-        rows.append(("교통비", t.get("item", ""), int(t.get("amount", 0)), t.get("payer", "여행사"), ""))
-
+        rows.append(("교통비", t.get("item", ""), int(t.get("amount", 0)), payer_display(t.get("payer", "여행사"), record)))
     for te in record.get("출장비항목리스트", []):
-        name = te.get("item", "")
-        payer = te.get("payer", "출장자")
-        if "일당" in name:
-            amt = calc_daily
-            note = f"{cur} {std_daily:,} × 적용환율 {applied_rate:,.2f} × {days}일 (천원 미만 절사)"
-        elif "숙박" in name:
-            amt = calc_hotel
-            if std_hotel == "실비":
-                note = "실비 정산"
-            else:
-                note = f"{cur} {std_hotel:,} × 적용환율 {applied_rate:,.2f} × {nights}박 (천원 미만 절사)"
-        else:
-            amt = int(te.get("amount", 0))
-            note = ""
-        rows.append(("출장비", name, int(amt), payer, note))
-
+        rows.append(("출장비", te.get("item", ""), int(te.get("amount", 0)), payer_display(te.get("payer", "출장자"), record)))
     for o in record.get("기타항목리스트", []):
         if o.get("item") or o.get("amount"):
-            rows.append(("기타", o.get("item", ""), int(o.get("amount", 0)), o.get("payer", "여행사"), ""))
+            rows.append(("기타", o.get("item", ""), int(o.get("amount", 0)), payer_display(o.get("payer", "여행사"), record)))
 
     return rows, std_daily, std_hotel, cur
 
@@ -617,7 +595,7 @@ def build_fund_excel(records):
     ws["A2"].alignment = XL_RIGHT
     ws.merge_cells("A2:I2")
 
-    headers = ["순번", "출장자", "부서", "직급", "출장지", "출장 기간", "출장자 계좌입금액(원)", "여행사 지급액(원)", "총 출장비(원)"]
+    headers = ["순번", "출장자", "부서", "직급", "출장지", "출장 기간", "직원 지급액(원)", "여행사 지급액(원)", "총 출장비(원)"]
     hr = 4
     _xl_header(ws, hr, headers)
     for i, (_, r) in enumerate(df.iterrows(), start=1):
@@ -625,7 +603,7 @@ def build_fund_excel(records):
         vals = [
             i, r["출장자성명"], r["부서"], r["직급"], r["출장지"],
             f'{r["출장시작일"]} ~ {r["출장종료일"]}',
-            int(r["직원_계좌입금액"]), int(r["여행사_지급액"]), int(r["총출장비"]),
+            int(r["직원_지급액"]), int(r["여행사_지급액"]), int(r["총출장비"]),
         ]
         for j, v in enumerate(vals, start=1):
             c = ws.cell(row=row, column=j, value=v)
@@ -659,7 +637,7 @@ def build_fund_excel(records):
     r2 = 2
     for i, rec in enumerate(records, start=1):
         items, _, _, _ = calc_item_rows(rec)
-        for cat, name, amt, payer, _note in items:
+        for cat, name, amt, payer in items:
             vals = [i, rec["출장자성명"], rec["출장지"], cat, name, amt, payer]
             for j, v in enumerate(vals, start=1):
                 c = ws2.cell(row=r2, column=j, value=v)
@@ -674,95 +652,244 @@ def build_fund_excel(records):
     return _xl_bytes(wb)
 
 
-def _fill_statement_sheet(ws, rec):
+# 출장비 산정 내역서 엑셀 양식 (제공해주신 '출장비산정내역' 양식을 코드에 내장)
+# ※ 이 파이썬 파일과 같은 폴더에 아래 이름의 엑셀 파일을 두면, 내장 양식 대신 그 파일을 양식으로 사용합니다.
+TEMPLATE_FILENAME = "출장비산정내역_양식.xlsx"
+TEMPLATE_B64 = (
+    "UEsDBBQABgAIAAAAIQBBN4LPbgEAAAQFAAATAAgCW0NvbnRlbnRfVHlwZXNdLnhtbCCiBAIooAACAAAAAAAAAAAAAAAAAAAAAAAA"
+    "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA"
+    "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA"
+    "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA"
+    "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA"
+    "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA"
+    "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA"
+    "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAACsVMluwjAQvVfqP0S+Vomhh6qqCBy6HFsk6AeYeJJY"
+    "JLblGSj8fSdmUVWxCMElUWzPWybzPBit2iZZQkDjbC76WU8kYAunja1y8T39SJ9FgqSsVo2zkIs1oBgN7+8G07UHTLjaYi5qIv8i"
+    "JRY1tAoz58HyTulCq4g/QyW9KuaqAvnY6z3JwlkCSyl1GGI4eINSLRpK3le8vFEyM1Ykr5tzHVUulPeNKRSxULm0+h9J6srSFKBd"
+    "sWgZOkMfQGmsAahtMh8MM4YJELExFPIgZ4AGLyPdusq4MgrD2nh8YOtHGLqd4662dV/8O4LRkIxVoE/Vsne5auSPC/OZc/PsNMil"
+    "rYktylpl7E73Cf54GGV89W8spPMXgc/oIJ4xkPF5vYQIc4YQad0A3rrtEfQcc60C6Anx9FY3F/AX+5QOjtQ4OI+c2gCXd2EXka46"
+    "9QwEgQzsQ3Jo2PaMHPmr2w7dnaJBH+CW8Q4b/gIAAP//AwBQSwMEFAAGAAgAAAAhALVVMCP0AAAATAIAAAsACAJfcmVscy8ucmVs"
+    "cyCiBAIooAACAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA"
+    "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA"
+    "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA"
+    "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA"
+    "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA"
+    "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA"
+    "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAACskk1P"
+    "wzAMhu9I/IfI99XdkBBCS3dBSLshVH6ASdwPtY2jJBvdvyccEFQagwNHf71+/Mrb3TyN6sgh9uI0rIsSFDsjtnethpf6cXUHKiZy"
+    "lkZxrOHEEXbV9dX2mUdKeSh2vY8qq7iooUvJ3yNG0/FEsRDPLlcaCROlHIYWPZmBWsZNWd5i+K4B1UJT7a2GsLc3oOqTz5t/15am"
+    "6Q0/iDlM7NKZFchzYmfZrnzIbCH1+RpVU2g5abBinnI6InlfZGzA80SbvxP9fC1OnMhSIjQS+DLPR8cloPV/WrQ08cudecQ3CcOr"
+    "yPDJgosfqN4BAAD//wMAUEsDBBQABgAIAAAAIQCBPpSX8wAAALoCAAAaAAgBeGwvX3JlbHMvd29ya2Jvb2sueG1sLnJlbHMgogQB"
+    "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"
+)
+
+
+def load_statement_template():
+    path = os.path.join(os.path.dirname(os.path.abspath(__file__)), TEMPLATE_FILENAME)
+    if os.path.exists(path):
+        return openpyxl.load_workbook(path)
+    return openpyxl.load_workbook(io.BytesIO(base64.b64decode(TEMPLATE_B64)))
+
+
+def fill_statement_sheet(ws, rec):
+    """양식 시트에 출장자 정보와 입력한 금액을 채워 넣는다 (양식의 서식/병합은 그대로 유지)"""
     items, std_daily, std_hotel, cur = calc_item_rows(rec)
     jpy = rec["지역구분"] == "특"
+    days = rec["출장일수"]
+    nights = rec["출장박수"]
+    hotel_amt = sum(a for cat, n, a, p in items if cat == "출장비" and "숙박" in n)
+    daily_amt = sum(a for cat, n, a, p in items if cat == "출장비" and "일당" in n)
+    unit = "(100엔 기준)" if jpy else ""
 
-    ws["A1"] = "해외출장비 산정 내역서"
-    ws["A1"].font = Font(bold=True, size=16, color="005CAB")
-    ws.merge_cells("A1:E1")
-    ws["A2"] = f"작성일: {datetime.date.today():%Y-%m-%d}"
-    ws["A2"].alignment = XL_RIGHT
-    ws.merge_cells("A2:E2")
+    # 출장자 정보
+    ws["B2"] = rec["부서"]
+    ws["D2"] = rec["출장자성명"]
+    ws["F2"] = rec["직급"]
+    ws["B3"] = rec["출장지"]
+    ws["D3"] = rec["지역구분"]
+    ws["F3"] = rec["직급구분"]
+    ws["B4"] = datetime.date.fromisoformat(rec["출장시작일"])
+    ws["D4"] = datetime.date.fromisoformat(rec["출장종료일"])
+    ws["B4"].number_format = "yyyy-mm-dd"
+    ws["D4"].number_format = "yyyy-mm-dd"
+    ws["F4"] = f"{nights}박 {days}일"
 
-    info = [
-        ("출장자 성명", rec["출장자성명"]),
-        ("부서 / 직급", f'{rec["부서"]} / {rec["직급"]} ({rec["직급구분"]})'),
-        ("출장지 / 지역구분", f'{rec["출장지"]} / {rec["지역구분"]}지역'),
-        ("출장 기간", f'{rec["출장시작일"]} ~ {rec["출장종료일"]} ({rec["출장박수"]}박 {rec["출장일수"]}일)'),
-        ("적용 환율", f'{cur} {rec["환율"]:,.2f}원' + (" (100엔 기준)" if jpy else " (1달러 기준)")),
-        ("일당 기준", f"{cur} {std_daily:,} / 일"),
-        ("숙박비 기준", "실비" if std_hotel == "실비" else f"{cur} {std_hotel:,} / 박"),
-    ]
-    row = 4
-    for label, value in info:
-        a = ws.cell(row=row, column=1, value=label)
-        a.fill = XL_SUB_FILL
-        a.font = Font(bold=True)
-        a.alignment = XL_CENTER
-        a.border = XL_BORDER
-        ws.cell(row=row, column=2, value=value)
-        ws.merge_cells(start_row=row, start_column=2, end_row=row, end_column=5)
-        for j in range(2, 6):
-            ws.cell(row=row, column=j).border = XL_BORDER
-        ws.cell(row=row, column=2).alignment = XL_LEFT
-        row += 1
+    # 적용 출장비 산정 기준 (금액은 1번 메뉴에서 입력한 값)
+    if std_hotel == "실비":
+        ws["B8"] = "실비"
+        ws["E8"] = "실비 정산"
+    else:
+        ws["B8"] = f"{std_hotel:,}{cur} / 박"
+        ws["E8"] = f"{std_hotel:,} {cur} * {nights}박 x 환율{unit}"
+    ws["C8"] = f"{nights}박"
+    ws["D8"] = hotel_amt
 
-    row += 1
-    _xl_header(ws, row, ["구분", "항목", "금액(원)", "지급처", "산정 근거 / 비고"])
-    first = row + 1
-    for cat, name, amt, payer, note in items:
-        row += 1
-        vals = [cat, name, amt, payer, note]
-        for j, v in enumerate(vals, start=1):
-            c = ws.cell(row=row, column=j, value=v)
-            c.border = XL_BORDER
-            if j == 3:
-                c.number_format = XL_NUM
-                c.alignment = XL_RIGHT
-            elif j == 5:
-                c.alignment = XL_LEFT
-            else:
-                c.alignment = XL_CENTER
-    last = row
+    ws["B9"] = f"{std_daily:,}{cur} / 일"
+    ws["C9"] = f"{days}일"
+    ws["D9"] = daily_amt
+    ws["E9"] = f"{std_daily:,} {cur} * {days}일 x 환율{unit}"
 
-    row += 2
-    summary = [
-        ("출장자 계좌입금액", f'=SUMIF(D{first}:D{last},"<>여행사",C{first}:C{last})'),
-        ("여행사 지급액", f'=SUMIF(D{first}:D{last},"여행사",C{first}:C{last})'),
-        ("총 출장 경비", f"=SUM(C{first}:C{last})"),
-    ]
-    for k, (label, formula) in enumerate(summary):
-        a = ws.cell(row=row, column=1, value=label)
-        ws.merge_cells(start_row=row, start_column=1, end_row=row, end_column=2)
-        v = ws.cell(row=row, column=3, value=formula)
-        v.number_format = XL_NUM
-        v.alignment = XL_RIGHT
-        for j in (1, 2, 3):
-            c = ws.cell(row=row, column=j)
-            c.border = XL_BORDER
-            c.fill = XL_SUB_FILL
-            c.font = Font(bold=True, color="005CAB" if k == 2 else "000000")
-        a.alignment = XL_CENTER
-        row += 1
+    ws["D10"] = "=D8+D9"
+    for cell in ("D8", "D9", "D10"):
+        ws[cell].number_format = "#,##0"
 
-    _xl_widths(ws, [20, 26, 18, 14, 60])
+    ws["A37"] = f"신청일 : {datetime.date.today():%Y년 %m월 %d일}"
 
 
 def build_statement_excel(records, indices):
-    """3. 출장비 산정 내역서 엑셀 (선택한 출장자별 시트)"""
-    wb = openpyxl.Workbook()
-    wb.remove(wb.active)
+    """3. 출장비 산정 내역서 엑셀 (제공된 양식 기준, 선택한 출장자별 시트)"""
+    wb = load_statement_template()
+    tpl = wb.worksheets[0]
     used = set()
     for i in indices:
         rec = records[i]
+        ws = wb.copy_worksheet(tpl)
         base = "".join(ch for ch in f'{i + 1}_{rec["출장자성명"]}' if ch not in '[]:*?/\\')[:31]
         title, n = base, 1
         while title in used:
             n += 1
             title = f"{base[:28]}_{n}"
         used.add(title)
-        _fill_statement_sheet(wb.create_sheet(title), rec)
+        ws.title = title
+        fill_statement_sheet(ws, rec)
+        # 인쇄 시 F열(직급 등)이 다음 장으로 넘어가지 않도록 가로 1페이지에 맞춤
+        ws.sheet_properties.pageSetUpPr = openpyxl.worksheet.properties.PageSetupProperties(fitToPage=True)
+        ws.page_setup.fitToWidth = 1
+        ws.page_setup.fitToHeight = 0
+    wb.remove(tpl)
+    wb.calculation.fullCalcOnLoad = True
     return _xl_bytes(wb)
 
 
@@ -988,6 +1115,10 @@ if menu == MENU_1:
     st.markdown("---")
     payer_options = ["여행사", "출장자", "직접입력"]
 
+    def payer_fmt(v):
+        # 저장값은 '출장자'로 유지하고, 화면에는 입력한 출장자 성명을 표시
+        return (name.strip() or "출장자") if v == "출장자" else v
+
     updated_transport_rows = []
     transport_sum = 0
     for idx, row_data in enumerate(st.session_state.transport_rows):
@@ -1013,7 +1144,7 @@ if menu == MENU_1:
             t_amt = int((int(digits or 0) // 1000) * 1000)
         with tc4:
             p_idx = payer_options.index(row_data["payer"]) if row_data["payer"] in payer_options else 0
-            t_payer = st.selectbox(f"교통비 지급처 {idx}", payer_options, index=p_idx, key=f"t_payer_{idx}", label_visibility="collapsed")
+            t_payer = st.selectbox(f"교통비 지급처 {idx}", payer_options, index=p_idx, key=f"t_payer_{idx}", format_func=payer_fmt, label_visibility="collapsed")
 
         transport_sum += t_amt
         updated_transport_rows.append({"item": t_name, "amount": t_amt, "payer": t_payer})
@@ -1055,7 +1186,7 @@ if menu == MENU_1:
             te_amt = int((int(digits or 0) // 1000) * 1000)
         with tec4:
             p_idx = payer_options.index(row_data["payer"]) if row_data["payer"] in payer_options else 1
-            te_payer = st.selectbox(f"출장비 지급처 {idx}", payer_options, index=p_idx, key=f"te_payer_{idx}", label_visibility="collapsed")
+            te_payer = st.selectbox(f"출장비 지급처 {idx}", payer_options, index=p_idx, key=f"te_payer_{idx}", format_func=payer_fmt, label_visibility="collapsed")
 
         travel_exp_sum += te_amt
         updated_travel_exp_rows.append({"item": te_name, "amount": te_amt, "payer": te_payer})
@@ -1095,7 +1226,7 @@ if menu == MENU_1:
             it_amt = int((int(digits or 0) // 1000) * 1000)
         with oc4:
             p_idx = payer_options.index(row_data["payer"]) if row_data["payer"] in payer_options else 0
-            it_payer = st.selectbox(f"기타 지급처 {idx}", payer_options, index=p_idx, key=f"other_payer_{idx}", label_visibility="collapsed")
+            it_payer = st.selectbox(f"기타 지급처 {idx}", payer_options, index=p_idx, key=f"other_payer_{idx}", format_func=payer_fmt, label_visibility="collapsed")
 
         other_sum += it_amt
         updated_other_rows.append({"item": it_name, "amount": it_amt, "payer": it_payer})
@@ -1144,7 +1275,7 @@ if menu == MENU_1:
                 "출장일수": calculated_days,
                 "출장박수": calculated_nights,
                 "환율": exchange_rate,
-                "직원_계좌입금액": real_employee_total,
+                "직원_지급액": real_employee_total,
                 "여행사_지급액": real_agency_total,
                 "총출장비": grand_total,
                 "교통비항목리스트": st.session_state.transport_rows.copy(),
@@ -1209,9 +1340,15 @@ elif menu == MENU_2:
         with m2:
             st.metric(label="총 여행사 송금액", value=f"{processed_df['여행사_지급액'].sum():,.0f} 원")
         with m3:
-            st.metric(label="총 직원 계좌 입금액", value=f"{processed_df['직원_계좌입금액'].sum():,.0f} 원")
+            st.metric(label="총 직원 지급액", value=f"{processed_df['직원_지급액'].sum():,.0f} 원")
 
-        st.dataframe(processed_df[["출장자성명", "부서", "직급", "출장지", "직원_계좌입금액", "여행사_지급액", "총출장비"]], use_container_width=True)
+        fund_view = processed_df[["출장자성명", "부서", "직급", "출장지", "직원_지급액", "여행사_지급액", "총출장비"]].copy()
+        fund_view.index = range(1, len(fund_view) + 1)
+        fund_view.index.name = "순번"
+        st.dataframe(
+            fund_view.style.format({"직원_지급액": "{:,.0f}", "여행사_지급액": "{:,.0f}", "총출장비": "{:,.0f}"}),
+            use_container_width=True,
+        )
 
         st.markdown("<br>", unsafe_allow_html=True)
         st.download_button(

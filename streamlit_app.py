@@ -337,7 +337,7 @@ SIDEBAR_BRAND_HTML = (
     '<div class="hw-side-logo">'
     + LOGO_SVG
     + "</div>"
-    '<div class="hw-side-desc">화천기공 해외출장 프로그램</div>'
+    '<div class="hw-side-desc">해외출장 업무 통합 시스템</div>'
     "</div>"
 )
 

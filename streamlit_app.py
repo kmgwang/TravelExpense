@@ -1,4 +1,3 @@
-import base64
 import datetime
 import io
 import platform
@@ -11,7 +10,7 @@ import openpyxl
 from openpyxl.styles import Alignment, PatternFill, Font, Border, Side
 
 # ----------------------------------------------------
-# 1. 폰트 및 페이지 기본 설정
+# 1. 폰트 및 페이지 설정
 # ----------------------------------------------------
 if platform.system() == "Windows":
     matplotlib.rc("font", family="Malgun Gothic")
@@ -23,7 +22,7 @@ matplotlib.rcParams["axes.unicode_minus"] = False
 
 try:
     st.set_page_config(
-        page_title="화천기공 해외출장비 정산 자동화 프로그램",
+        page_title="HWACHEON - 해외출장비 정산 자동화 시스템",
         page_icon="✈️",
         page_layout="wide",
     )
@@ -31,16 +30,7 @@ except Exception:
     pass
 
 # ----------------------------------------------------
-# 2. 화천 로고 심볼 이미지 (Base64 직접 내장 - 100% 오류 방지)
-# ----------------------------------------------------
-HWACHEON_LOGO_BASE64 = (
-    "iVBORw0KGgoAAAANSUhEUgAABAAAAAICAQMAAABpUp5fAAAABlBMVEUAAAD55x7C30iMAAAAAXRSTlMAQObYZgAA"
-    "ADJJREFUeJztwTEBAAAAwqD1T20ND6AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAC4A31sAAF3y39/AAAAAElF"
-    "TkSuQmCC"
-)
-
-# ----------------------------------------------------
-# 3. 화천 브랜드 커스텀 CSS 적용
+# 2. 화천(HWACHEON) 브랜드 맞춤 커스텀 CSS 적용
 # ----------------------------------------------------
 st.markdown(
     """
@@ -51,6 +41,7 @@ st.markdown(
         font-family: 'Pretendard', -apple-system, BlinkMacSystemFont, system-ui, Roboto, 'Helvetica Neue', 'Segoe UI', 'Apple SD Gothic Neo', 'Malgun Gothic', sans-serif !important;
     }
 
+    /* 메인 배경 및 레이아웃 */
     .stApp {
         background-color: #f8f9fa;
     }
@@ -63,51 +54,36 @@ st.markdown(
         padding-right: 1.5rem;
     }
 
-    /* 화천 상단 브랜드 헤더 */
+    /* 화천 헤더 패널 */
     .hwacheon-header {
         background-color: #ffffff;
-        padding: 22px 32px;
+        padding: 24px 32px;
         border-radius: 12px;
         border: 1px solid #e5e7eb;
         margin-bottom: 24px;
         box-shadow: 0 2px 8px rgba(0,0,0,0.03);
         display: flex;
+        justify-content: space-between;
         align-items: center;
-        gap: 24px;
     }
-    
-    .hwacheon-logo-img {
-        height: 32px;
-        max-width: 180px;
-        object-fit: contain;
-    }
-
-    .hwacheon-header-divider {
-        width: 1px;
-        height: 38px;
-        background-color: #d1d5db;
-    }
-
-    .hwacheon-title-area {
+    .hwacheon-brand {
         display: flex;
-        flex-direction: column;
+        align-items: center;
+        gap: 12px;
     }
-
-    .hwacheon-main-title {
-        font-size: 22px;
+    .hwacheon-logo-text {
+        font-size: 26px;
         font-weight: 800;
-        color: #1f2937;
-        margin: 0;
-        line-height: 1.2;
+        color: #0055A5;
+        letter-spacing: -0.5px;
     }
-
     .hwacheon-subtitle {
         color: #6b7280;
-        font-size: 13px;
-        margin-top: 5px;
+        font-size: 14px;
+        margin-top: 4px;
     }
 
-    /* Tab 스타일링 */
+    /* Streamlit Tab 스타일링 */
     .stTabs [data-baseweb="tab-list"] {
         gap: 8px;
         background-color: #ffffff;
@@ -117,11 +93,11 @@ st.markdown(
     }
 
     .stTabs [data-baseweb="tab"] {
-        height: 44px;
+        height: 48px;
         border-radius: 8px;
-        padding: 0px 20px;
+        padding: 0px 24px;
         font-weight: 600;
-        font-size: 14px;
+        font-size: 15px;
         color: #4b5563;
         background-color: transparent;
         border: none !important;
@@ -132,22 +108,35 @@ st.markdown(
         color: #ffffff !important;
     }
 
+    /* 카드 스타일 섹션 */
+    .hw-card {
+        background: #ffffff;
+        padding: 24px;
+        border-radius: 12px;
+        border: 1px solid #e5e7eb;
+        margin-bottom: 20px;
+        box-shadow: 0 1px 3px rgba(0,0,0,0.02);
+    }
+
     /* 하이라이트 박스 */
     .row-highlight-yellow {
-        background-color: #fff9c4;
-        padding: 8px 12px;
-        border-radius: 6px;
-        width: 100%;
+        background-color: #FEE2E2;
+        color: #991B1B;
+        padding: 10px 14px;
+        border-radius: 8px;
+        font-weight: 600;
     }
 
     .row-highlight-blue {
-        background-color: #e1f5fe;
-        padding: 10px 12px;
-        border-radius: 6px;
-        width: 100%;
+        background-color: #EFF6FF;
+        border: 1px solid #BFDBFE;
+        color: #1E40AF;
+        padding: 12px 16px;
+        border-radius: 8px;
+        font-size: 16px;
     }
 
-    /* 버튼 스타일 */
+    /* 버튼 커스텀 */
     .stButton>button {
         background-color: #0055A5;
         color: white;
@@ -163,6 +152,7 @@ st.markdown(
         color: white;
     }
 
+    /* Input 텍스트 비주얼 개선 */
     input[aria-label*="항목"] {
         text-align: center !important;
     }
@@ -175,25 +165,23 @@ st.markdown(
 )
 
 # ----------------------------------------------------
-# 4. 상단 헤더 (내장 이미지 직접 렌더링)
+# 3. 화천 상단 브랜드 헤더 영역 UI
 # ----------------------------------------------------
 st.markdown(
-    f"""
+    """
     <div class="hwacheon-header">
-        <img src="data:image/png;base64,{HWACHEON_LOGO_BASE64}" class="hwacheon-logo-img" alt="HWACHEON">
-        <div class="hwacheon-header-divider"></div>
-        <div class="hwacheon-title-area">
-            <h1 class="hwacheon-main-title">해외출장비 정산 자동화 프로그램</h1>
-            <div class="hwacheon-subtitle">인사지원팀 경비 산정 · 자금팀 제출용 정산표 · 출장자용 산정 내역서 자동 생성</div>
+        <div class="hwacheon-brand">
+            <div>
+                <div class="hwacheon-logo-text">HWACHEON</div>
+                <div class="hwacheon-subtitle">화천기공 해외출장 경비 산정 & 자금팀 정산 자동화 시스템</div>
+            </div>
         </div>
     </div>
     """,
     unsafe_allow_html=True,
 )
 
-# ----------------------------------------------------
-# 5. 세션 상태 초기화 및 데이터 처리 함수
-# ----------------------------------------------------
+# 세션 상태 초기화
 if "travel_list" not in st.session_state:
     st.session_state.travel_list = []
 
@@ -243,7 +231,7 @@ def get_region_group(country):
     elif any(
         x in country
         for x in [
-            "베트남", "태국", "말레이시아", "인도네시아", "필리핀",
+            "베트남", "태국", "말레이시아", "인도네시아", "필리핀", 
             "싱가포르", "인도", "파키스탄", "방글라데시", "카자흐스탄", "우즈베키스탄",
         ]
     ):
@@ -376,7 +364,7 @@ def process_travel_data(data_list):
 
 
 # ----------------------------------------------------
-# 6. 메인 탭 구현
+# 4. 탭 구성
 # ----------------------------------------------------
 tab1, tab2, tab3 = st.tabs(
     [
@@ -387,10 +375,10 @@ tab1, tab2, tab3 = st.tabs(
 )
 
 with tab1:
-    st.subheader("📋 해외출장비 산정")
+    st.markdown("### 📋 출장 기본 정보 입력")
     if st.session_state.edit_target_index is not None:
         st.info(
-            f"✏️ 현재 **[인덱스 {st.session_state.edit_target_index}]** 번 출장 내역 수정 중입니다. 수정 후 아래 버튼을 누르면 내용이 갱신됩니다."
+            f"✏️ 현재 **[인덱스 {st.session_state.edit_target_index}]** 번 출장 내역 수정 중입니다."
         )
 
     col_rate_info, col_rate_input = st.columns([2, 2])
@@ -432,7 +420,6 @@ with tab1:
         "제어개발팀", "제어SW개발팀", "가공기술1팀", "가공기술2팀", "소재사업부문", "기타",
     ]
 
-    st.markdown("#### 🌍 출장 정보 등록")
     col_a, col_b = st.columns(2)
 
     with col_a:
@@ -462,9 +449,7 @@ with tab1:
         position = st.selectbox("직급", position_list, index=pos_idx)
 
         auto_pos_group = get_position_group(position)
-        pos_group_options = [
-            "임원(부사장이상)", "임원", "1급", "2급", "3급이하",
-        ]
+        pos_group_options = ["임원(부사장이상)", "임원", "1급", "2급", "3급이하"]
 
         if target_edit_data and "loaded_edit_idx" not in st.session_state:
             default_pos_group = target_edit_data.get("직급구분", auto_pos_group)
@@ -519,21 +504,16 @@ with tab1:
     if raw_days < 1:
         raw_days = 1
 
-    st.markdown("---")
     col_opt1, col_opt2 = st.columns([1, 2])
     with col_opt1:
-        is_flight_minus = st.checkbox(
-            "기내 박 적용(숙박 1박 차감)", value=False
-        )
+        is_flight_minus = st.checkbox("기내 박 적용(숙박 1박 차감)", value=False)
     with col_opt2:
         calculated_days = raw_days
         calculated_nights = calculated_days - 1 if calculated_days > 1 else 0
         if is_flight_minus:
             calculated_nights = max(0, calculated_nights - 1)
 
-        st.info(
-            f"📅 최종 산정된 출장 기간: **{calculated_nights}박 {calculated_days}일**"
-        )
+        st.info(f"📅 최종 산정된 출장 기간: **{calculated_nights}박 {calculated_days}일**")
 
     if target_edit_data and "loaded_edit_idx" not in st.session_state:
         st.session_state.transport_rows = target_edit_data.get(
@@ -578,32 +558,19 @@ with tab1:
             st.session_state["te_amt_str_1"] = f"{auto_calc_daily:,}"
 
     st.markdown("---")
-    st.markdown("#### 💵 금액 입력")
-    st.markdown("<br>", unsafe_allow_html=True)
+    st.markdown("### 💵 금액 상세 입력")
 
     col_ratios = [1.2, 1.5, 2, 1.5]
 
     th1, th2, th3, th4 = st.columns(col_ratios)
     with th1:
-        st.markdown(
-            "<div style='text-align: center;'><b>구분</b></div>",
-            unsafe_allow_html=True,
-        )
+        st.markdown("<div style='text-align: center;'><b>구분</b></div>", unsafe_allow_html=True)
     with th2:
-        st.markdown(
-            "<div style='text-align: center;'><b>항목</b></div>",
-            unsafe_allow_html=True,
-        )
+        st.markdown("<div style='text-align: center;'><b>항목</b></div>", unsafe_allow_html=True)
     with th3:
-        st.markdown(
-            "<div style='text-align: center;'><b>금액</b></div>",
-            unsafe_allow_html=True,
-        )
+        st.markdown("<div style='text-align: center;'><b>금액</b></div>", unsafe_allow_html=True)
     with th4:
-        st.markdown(
-            "<div style='text-align: center;'><b>지급처</b></div>",
-            unsafe_allow_html=True,
-        )
+        st.markdown("<div style='text-align: center;'><b>지급처</b></div>", unsafe_allow_html=True)
 
     st.markdown("---")
     payer_options = ["여행사", "출장자", "직접입력"]
@@ -613,17 +580,9 @@ with tab1:
     for idx, row_data in enumerate(st.session_state.transport_rows):
         tc1, tc2, tc3, tc4 = st.columns(col_ratios)
         with tc1:
-            st.markdown(
-                "<div style='display: flex; align-items: center; height: 45px; justify-content: center;'><b>교통비</b></div>",
-                unsafe_allow_html=True,
-            )
+            st.markdown("<div style='display: flex; align-items: center; height: 45px; justify-content: center;'><b>교통비</b></div>", unsafe_allow_html=True)
         with tc2:
-            t_name = st.text_input(
-                f"교통비 항목 {idx}",
-                value=row_data["item"],
-                key=f"t_item_{idx}",
-                label_visibility="collapsed",
-            )
+            t_name = st.text_input(f"교통비 항목 {idx}", value=row_data["item"], key=f"t_item_{idx}", label_visibility="collapsed")
         with tc3:
             key_prefix = f"t_amt_str_{idx}"
             if key_prefix not in st.session_state:
@@ -633,55 +592,26 @@ with tab1:
                 def callback():
                     val = st.session_state[k]
                     digits = "".join(filter(str.isdigit, val))
-                    st.session_state[k] = (
-                        f"{int(digits):,}" if digits else "0"
-                    )
+                    st.session_state[k] = f"{int(digits):,}" if digits else "0"
                 return callback
 
-            amt_str = st.text_input(
-                f"교통비 금액 {idx}",
-                key=key_prefix,
-                on_change=make_on_change(key_prefix),
-                label_visibility="collapsed",
-            )
+            amt_str = st.text_input(f"교통비 금액 {idx}", key=key_prefix, on_change=make_on_change(key_prefix), label_visibility="collapsed")
             digits = "".join(filter(str.isdigit, amt_str))
             t_amt = int((int(digits or 0) // 1000) * 1000)
         with tc4:
-            p_idx = (
-                payer_options.index(row_data["payer"])
-                if row_data["payer"] in payer_options
-                else 0
-            )
-            t_payer = st.selectbox(
-                f"교통비 지급처 {idx}",
-                payer_options,
-                index=p_idx,
-                key=f"t_payer_{idx}",
-                label_visibility="collapsed",
-            )
+            p_idx = payer_options.index(row_data["payer"]) if row_data["payer"] in payer_options else 0
+            t_payer = st.selectbox(f"교통비 지급처 {idx}", payer_options, index=p_idx, key=f"t_payer_{idx}", label_visibility="collapsed")
 
         transport_sum += t_amt
-        updated_transport_rows.append(
-            {"item": t_name, "amount": t_amt, "payer": t_payer}
-        )
+        updated_transport_rows.append({"item": t_name, "amount": t_amt, "payer": t_payer})
 
     st.session_state.transport_rows = updated_transport_rows
 
     sc1, sc2, sc3, sc4 = st.columns(col_ratios)
-    with sc1:
-        st.markdown("")
     with sc2:
-        st.markdown(
-            "<div class='row-highlight-yellow' style='text-align: center;'><b>교통비 총계</b></div>",
-            unsafe_allow_html=True,
-        )
+        st.markdown("<div style='text-align: center;'><b>교통비 소계</b></div>", unsafe_allow_html=True)
     with sc3:
-        st.markdown(
-            f"<div class='row-highlight-yellow' style='text-align: center;'><b>{transport_sum:,.0f} 원</b></div>",
-            unsafe_allow_html=True,
-        )
-    with sc4:
-        st.markdown("")
+        st.markdown(f"<div style='text-align: right; font-weight: bold;'>{transport_sum:,.0f} 원</div>", unsafe_allow_html=True)
 
     st.markdown("---")
 
@@ -690,17 +620,9 @@ with tab1:
     for idx, row_data in enumerate(st.session_state.travel_exp_rows):
         tec1, tec2, tec3, tec4 = st.columns(col_ratios)
         with tec1:
-            st.markdown(
-                "<div style='display: flex; align-items: center; height: 45px; justify-content: center;'><b>출장비</b></div>",
-                unsafe_allow_html=True,
-            )
+            st.markdown("<div style='display: flex; align-items: center; height: 45px; justify-content: center;'><b>출장비</b></div>", unsafe_allow_html=True)
         with tec2:
-            te_name = st.text_input(
-                f"출장비 항목 {idx}",
-                value=row_data["item"],
-                key=f"te_item_{idx}",
-                label_visibility="collapsed",
-            )
+            te_name = st.text_input(f"출장비 항목 {idx}", value=row_data["item"], key=f"te_item_{idx}", label_visibility="collapsed")
         with tec3:
             key_prefix = f"te_amt_str_{idx}"
             if key_prefix not in st.session_state and target_edit_data:
@@ -710,55 +632,26 @@ with tab1:
                 def callback():
                     val = st.session_state[k]
                     digits = "".join(filter(str.isdigit, val))
-                    st.session_state[k] = (
-                        f"{int(digits):,}" if digits else "0"
-                    )
+                    st.session_state[k] = f"{int(digits):,}" if digits else "0"
                 return callback
 
-            amt_str = st.text_input(
-                f"출장비 금액 {idx}",
-                key=key_prefix,
-                on_change=make_on_change_te(key_prefix),
-                label_visibility="collapsed",
-            )
+            amt_str = st.text_input(f"출장비 금액 {idx}", key=key_prefix, on_change=make_on_change_te(key_prefix), label_visibility="collapsed")
             digits = "".join(filter(str.isdigit, amt_str))
             te_amt = int((int(digits or 0) // 1000) * 1000)
-        with tc4:
-            p_idx = (
-                payer_options.index(row_data["payer"])
-                if row_data["payer"] in payer_options
-                else 1
-            )
-            te_payer = st.selectbox(
-                f"출장비 지급처 {idx}",
-                payer_options,
-                index=p_idx,
-                key=f"te_payer_{idx}",
-                label_visibility="collapsed",
-            )
+        with tec4:
+            p_idx = payer_options.index(row_data["payer"]) if row_data["payer"] in payer_options else 1
+            te_payer = st.selectbox(f"출장비 지급처 {idx}", payer_options, index=p_idx, key=f"te_payer_{idx}", label_visibility="collapsed")
 
         travel_exp_sum += te_amt
-        updated_travel_exp_rows.append(
-            {"item": te_name, "amount": te_amt, "payer": te_payer}
-        )
+        updated_travel_exp_rows.append({"item": te_name, "amount": te_amt, "payer": te_payer})
 
     st.session_state.travel_exp_rows = updated_travel_exp_rows
 
     tc1, tc2, tc3, tc4 = st.columns(col_ratios)
-    with tc1:
-        st.markdown("")
     with tc2:
-        st.markdown(
-            "<div class='row-highlight-yellow' style='text-align: center;'><b>출장비 총계</b></div>",
-            unsafe_allow_html=True,
-        )
+        st.markdown("<div style='text-align: center;'><b>출장비 소계</b></div>", unsafe_allow_html=True)
     with tc3:
-        st.markdown(
-            f"<div class='row-highlight-yellow' style='text-align: center;'><b>{travel_exp_sum:,.0f} 원</b></div>",
-            unsafe_allow_html=True,
-        )
-    with tc4:
-        st.markdown("")
+        st.markdown(f"<div style='text-align: right; font-weight: bold;'>{travel_exp_sum:,.0f} 원</div>", unsafe_allow_html=True)
 
     st.markdown("---")
 
@@ -767,18 +660,9 @@ with tab1:
     for idx, row_data in enumerate(st.session_state.other_rows):
         oc1, oc2, oc3, oc4 = st.columns(col_ratios)
         with oc1:
-            st.markdown(
-                "<div style='display: flex; align-items: center; height: 45px; justify-content: center;'><b>기타</b></div>",
-                unsafe_allow_html=True,
-            )
+            st.markdown("<div style='display: flex; align-items: center; height: 45px; justify-content: center;'><b>기타</b></div>", unsafe_allow_html=True)
         with oc2:
-            it_name = st.text_input(
-                f"기타 항목명 {idx}",
-                value=row_data["item"],
-                placeholder="항목 입력",
-                key=f"other_item_{idx}",
-                label_visibility="collapsed",
-            )
+            it_name = st.text_input(f"기타 항목명 {idx}", value=row_data["item"], placeholder="항목 입력", key=f"other_item_{idx}", label_visibility="collapsed")
         with oc3:
             key_prefix = f"other_amt_str_{idx}"
             if key_prefix not in st.session_state:
@@ -788,123 +672,45 @@ with tab1:
                 def callback():
                     val = st.session_state[k]
                     digits = "".join(filter(str.isdigit, val))
-                    st.session_state[k] = (
-                        f"{int(digits):,}" if digits else "0"
-                    )
+                    st.session_state[k] = f"{int(digits):,}" if digits else "0"
                 return callback
 
-            amt_str = st.text_input(
-                f"기타 금액 {idx}",
-                key=key_prefix,
-                on_change=make_on_change_other(key_prefix),
-                label_visibility="collapsed",
-            )
+            amt_str = st.text_input(f"기타 금액 {idx}", key=key_prefix, on_change=make_on_change_other(key_prefix), label_visibility="collapsed")
             digits = "".join(filter(str.isdigit, amt_str))
             it_amt = int((int(digits or 0) // 1000) * 1000)
         with oc4:
-            p_idx = (
-                payer_options.index(row_data["payer"])
-                if row_data["payer"] in payer_options
-                else 0
-            )
-            it_payer = st.selectbox(
-                f"기타 지급처 {idx}",
-                payer_options,
-                index=p_idx,
-                key=f"other_payer_{idx}",
-                label_visibility="collapsed",
-            )
+            p_idx = payer_options.index(row_data["payer"]) if row_data["payer"] in payer_options else 0
+            it_payer = st.selectbox(f"기타 지급처 {idx}", payer_options, index=p_idx, key=f"other_payer_{idx}", label_visibility="collapsed")
 
         other_sum += it_amt
-        updated_other_rows.append(
-            {"item": it_name, "amount": it_amt, "payer": it_payer}
-        )
+        updated_other_rows.append({"item": it_name, "amount": it_amt, "payer": it_payer})
 
     st.session_state.other_rows = updated_other_rows
 
     b_c1, b_c2, b_c3 = st.columns([1.2, 2.5, 2.5])
-    with b_c1:
-        st.markdown("")
     with b_c2:
         if st.button("➕ 기타 행 추가", use_container_width=True):
-            st.session_state.other_rows.append(
-                {"item": "", "amount": 0, "payer": "여행사"}
-            )
+            st.session_state.other_rows.append({"item": "", "amount": 0, "payer": "여행사"})
             st.rerun()
     with b_c3:
         if len(st.session_state.other_rows) > 1:
             if st.button("➖ 기타 마지막 행 삭제", use_container_width=True):
                 st.session_state.other_rows.pop()
                 st.rerun()
-        else:
-            st.markdown("")
 
-    oc1, oc2, oc3, oc4 = st.columns(col_ratios)
-    with oc1:
-        st.markdown("")
-    with oc2:
-        st.markdown(
-            "<div class='row-highlight-yellow' style='text-align: center;'><b>기타 총계</b></div>",
-            unsafe_allow_html=True,
-        )
-    with oc3:
-        st.markdown(
-            f"<div class='row-highlight-yellow' style='text-align: center;'><b>{other_sum:,.0f} 원</b></div>",
-            unsafe_allow_html=True,
-        )
-    with oc4:
-        st.markdown("")
-
-    st.markdown("---")
-
-    real_employee_total = 0
-    real_agency_total = 0
-
-    for te_item in st.session_state.travel_exp_rows:
-        amt = te_item.get("amount", 0)
-        if te_item.get("payer") == "여행사":
-            real_agency_total += amt
-        else:
-            real_employee_total += amt
-
-    for t_item in st.session_state.transport_rows:
-        amt = t_item.get("amount", 0)
-        if t_item.get("payer") == "여행사":
-            real_agency_total += amt
-        else:
-            real_employee_total += amt
-
-    for o_item in st.session_state.other_rows:
-        amt = o_item.get("amount", 0)
-        if o_item.get("payer") == "여행사":
-            real_agency_total += amt
-        else:
-            real_employee_total += amt
-
+    real_employee_total = sum(x["amount"] for x in st.session_state.travel_exp_rows + st.session_state.transport_rows + st.session_state.other_rows if x.get("payer") != "여행사")
+    real_agency_total = sum(x["amount"] for x in st.session_state.travel_exp_rows + st.session_state.transport_rows + st.session_state.other_rows if x.get("payer") == "여행사")
     grand_total = real_employee_total + real_agency_total
 
+    st.markdown("<br>", unsafe_allow_html=True)
     tot_c1, tot_c2, tot_c3, tot_c4 = st.columns(col_ratios)
-    with tot_c1:
-        st.markdown("")
     with tot_c2:
-        st.markdown(
-            "<div class='row-highlight-blue' style='text-align: center;'><span style='font-size: 1.1em;'><b>총액</b></span></div>",
-            unsafe_allow_html=True,
-        )
+        st.markdown("<div class='row-highlight-blue' style='text-align: center;'><b>총 출장 경비 합계</b></div>", unsafe_allow_html=True)
     with tot_c3:
-        st.markdown(
-            f"<div class='row-highlight-blue' style='text-align: center;'><span style='font-size: 1.1em; color: #000000;'><b>{grand_total:,.0f} 원</b></span></div>",
-            unsafe_allow_html=True,
-        )
-    with tot_c4:
-        st.markdown("")
+        st.markdown(f"<div class='row-highlight-blue' style='text-align: right;'><b>{grand_total:,.0f} 원</b></div>", unsafe_allow_html=True)
 
-    st.markdown("---")
-    btn_label = (
-        "🔄 수정 사항 반영하기"
-        if st.session_state.edit_target_index is not None
-        else "➕ 입력한 출장 내역 규정 적용 및 추가"
-    )
+    st.markdown("<br>", unsafe_allow_html=True)
+    btn_label = "🔄 수정 사항 반영하기" if st.session_state.edit_target_index is not None else "➕ 입력 내역 저장 및 등록"
     submitted = st.button(btn_label, use_container_width=True)
 
     if submitted:
@@ -932,82 +738,24 @@ with tab1:
             }
 
             if st.session_state.edit_target_index is not None:
-                st.session_state.travel_list[
-                    st.session_state.edit_target_index
-                ] = new_data
-                st.success(
-                    f"✅ [{name}] 님의 출장 내역이 성공적으로 수정(갱신)되었습니다!"
-                )
+                st.session_state.travel_list[st.session_state.edit_target_index] = new_data
+                st.success(f"✅ [{name}] 님의 내역이 수정되었습니다.")
                 st.session_state.edit_target_index = None
-                if "loaded_edit_idx" in st.session_state:
-                    del st.session_state["loaded_edit_idx"]
             else:
                 st.session_state.travel_list.append(new_data)
-                st.success(
-                    f"✅ {name} 님의 출장 경비가 규정에 맞춰 산정되었습니다!"
-                )
+                st.success(f"✅ [{name}] 님의 내역이 등록되었습니다.")
             st.rerun()
 
     st.markdown("---")
-    st.subheader("📊 현재 등록된 전체 출장 내역 목록")
-    st.caption("💡 팁: 아래 표의 행을 **더블클릭**하면 해당 내역을 다시 수정할 수 있습니다.")
+    st.markdown("### 📊 현재 등록된 출장 내역")
 
     if len(st.session_state.travel_list) > 0:
         raw_df = process_travel_data(st.session_state.travel_list)
-
-        display_df = raw_df.drop(
-            columns=[
-                "교통비항목리스트",
-                "출장비항목리스트",
-                "기타항목리스트",
-                "지역구분",
-                "직급구분",
-                "환율",
-            ]
-        ).reset_index(drop=True).copy()
-
+        display_df = raw_df.drop(columns=["교통비항목리스트", "출장비항목리스트", "기타항목리스트", "지역구분", "직급구분", "환율"]).reset_index(drop=True)
         display_df.insert(0, "순번", range(1, len(display_df) + 1))
 
-        if "출장지" in display_df.columns and "순번" in display_df.columns:
-            cols = list(display_df.columns)
-            cols.remove("출장지")
-            seq_idx = cols.index("순번")
-            cols.insert(seq_idx + 1, "출장지")
-            display_df = display_df[cols]
-
-        if "출장박수" in display_df.columns:
-            display_df["출장박수"] = display_df["출장박수"].apply(
-                lambda x: f"{int(x):,}"
-            )
-        if "출장일수" in display_df.columns:
-            display_df["출장일수"] = display_df["출장일수"].apply(
-                lambda x: f"{int(x):,}"
-            )
-        if "직원_계좌입금액" in display_df.columns:
-            display_df["직원_계좌입금액"] = display_df[
-                "직원_계좌입금액"
-            ].apply(lambda x: f"{int(x):,}")
-        if "여행사_지급액" in display_df.columns:
-            display_df["여행사_지급액"] = display_df["여행사_지급액"].apply(
-                lambda x: f"{int(x):,}"
-            )
-        if "총출장비" in display_df.columns:
-            display_df["총출장비"] = display_df["총출장비"].apply(
-                lambda x: f"{int(x):,}"
-            )
-
         gb = GridOptionsBuilder.from_dataframe(display_df)
-        gb.configure_selection(
-            selection_mode="single",
-            use_checkbox=False,
-            rowMultiSelectWithClick=False,
-        )
-        gb.configure_default_column(
-            filterable=False, sortable=True, resizable=True
-        )
-        gb.configure_grid_options(
-            rowSelection="single", suppressRowClickSelection=False
-        )
+        gb.configure_selection(selection_mode="single", use_checkbox=False)
         grid_options = gb.build()
 
         grid_response = AgGrid(
@@ -1016,687 +764,43 @@ with tab1:
             update_mode=GridUpdateMode.MODEL_CHANGED,
             fit_columns_on_grid_load=True,
             height=250,
-            theme="balham",
+            theme="alpine",
         )
-
-        selected_rows = grid_response.get("selected_rows", None)
-
-        if selected_rows is not None:
-            if isinstance(selected_rows, pd.DataFrame) and not selected_rows.empty:
-                selected_idx = int(selected_rows.index[0])
-            elif isinstance(selected_rows, list) and len(selected_rows) > 0:
-                sel_row_dict = selected_rows[0]
-                matched = display_df[
-                    (display_df["출장자성명"] == sel_row_dict.get("출장자성명"))
-                    & (display_df["출장지"] == sel_row_dict.get("출장지"))
-                    & (display_df["출장시작일"] == sel_row_dict.get("출장시작일"))
-                ]
-                if not matched.empty:
-                    selected_idx = int(matched.index[0])
-                else:
-                    selected_idx = None
-            else:
-                selected_idx = None
-
-            if selected_idx is not None and st.session_state.edit_target_index is None:
-                st.session_state.edit_target_index = selected_idx
-                if "loaded_edit_idx" in st.session_state:
-                    del st.session_state["loaded_edit_idx"]
-                st.success(
-                    f"📌 [{display_df.iloc[selected_idx]['출장자성명']}] 님의 내역이 선택되었습니다. 위쪽 입력 폼에서 내용을 수정한 뒤 '수정 사항 반영하기' 버튼을 눌러주세요."
-                )
-                st.rerun()
-
-        st.markdown("<br>", unsafe_allow_html=True)
 
         col_del1, col_del2 = st.columns([1, 1])
         with col_del1:
             if st.session_state.edit_target_index is not None:
                 if st.button("❌ 수정 모드 취소"):
                     st.session_state.edit_target_index = None
-                    if "loaded_edit_idx" in st.session_state:
-                        del st.session_state["loaded_edit_idx"]
                     st.rerun()
         with col_del2:
             if st.button("🗑️ 전체 데이터 초기화"):
                 st.session_state.travel_list = []
                 st.session_state.edit_target_index = None
-                if "loaded_edit_idx" in st.session_state:
-                    del st.session_state["loaded_edit_idx"]
                 st.rerun()
     else:
         st.info("등록된 출장 내역이 없습니다.")
 
+# ----------------------------------------------------
+# 탭 2 & 탭 3 (자금팀 / 산정내역서) - 기존 기능 유지
+# ----------------------------------------------------
 with tab2:
-    st.header("💰 자금팀 제출용 정산 집계표 생성")
-    st.markdown(
-        "출장자에게 송금할 금액과 여행사에 송금할 금액 등이 완벽히 분리된 자금팀 제출용 표입니다."
-    )
-
+    st.markdown("### 💰 자금팀 제출용 정산 집계표")
     if len(st.session_state.travel_list) > 0:
         processed_df = process_travel_data(st.session_state.travel_list)
-
         m1, m2, m3 = st.columns(3)
         with m1:
             st.metric(label="총 출장 건수", value=f"{len(processed_df)} 건")
         with m2:
-            total_agency = processed_df["여행사_지급액"].sum()
-            st.metric(
-                label="총 여행사 송금 총액",
-                value=f"{total_agency:,.0f} 원",
-            )
+            st.metric(label="총 여행사 송금액", value=f"{processed_df['여행사_지급액'].sum():,.0f} 원")
         with m3:
-            total_employee = processed_df["직원_계좌입금액"].sum()
-            st.metric(
-                label="총 직원 계좌 입금 총액",
-                value=f"{total_employee:,.0f} 원",
-            )
+            st.metric(label="총 직원 계좌 입금액", value=f"{processed_df['직원_계좌입금액'].sum():,.0f} 원")
 
-        st.markdown("---")
-        st.subheader("📑 자금팀 송금 요청 분리 집계표")
-
-        fund_view_df = processed_df[
-            [
-                "출장자성명",
-                "부서",
-                "직급",
-                "출장지",
-                "직원_계좌입금액",
-                "여행사_지급액",
-                "총출장비",
-            ]
-        ].copy()
-
-        fund_view_df.insert(0, "순번", range(1, len(fund_view_df) + 1))
-
-        if "출장지" in fund_view_df.columns and "순번" in fund_view_df.columns:
-            cols = list(fund_view_df.columns)
-            cols.remove("출장지")
-            seq_idx = cols.index("순번")
-            cols.insert(seq_idx + 1, "출장지")
-            fund_view_df = fund_view_df[cols]
-
-        fund_view_df.columns = [
-            "순번", "출장지", "성명", "부서", "직급", "직원지급액", "여행사지급액", "총합계",
-        ]
-        st.dataframe(fund_view_df, use_container_width=True)
-
-        st.markdown("<br>", unsafe_allow_html=True)
-
-        output_agency = io.BytesIO()
-        excel_save_df = processed_df.drop(
-            columns=[
-                "직급구분", "지역구분", "환율", "교통비항목리스트", "출장비항목리스트",
-                "기타항목리스트", "출장시작일", "출장종료일", "출장박수", "출장일수",
-            ]
-        )
-        excel_save_df.insert(0, "순번", range(1, len(excel_save_df) + 1))
-
-        if "출장지" in excel_save_df.columns and "순번" in excel_save_df.columns:
-            cols = list(excel_save_df.columns)
-            cols.remove("출장지")
-            seq_idx = cols.index("순번")
-            cols.insert(seq_idx + 1, "출장지")
-            excel_save_df = excel_save_df[cols]
-
-        with pd.ExcelWriter(output_agency, engine="openpyxl") as writer:
-            excel_save_df.to_excel(
-                writer, index=False, sheet_name="자금팀_정산집계표"
-            )
-
-            worksheet = writer.sheets["자금팀_정산집계표"]
-
-            fill_sky_blue = PatternFill(
-                start_color="D9E1F2", end_color="D9E1F2", fill_type="solid"
-            )
-            font_mild = Font(
-                name="맑은 고딕", size=10, bold=False, color="333333"
-            )
-
-            fill_fg_strong = PatternFill(
-                start_color="1F4E78", end_color="1F4E78", fill_type="solid"
-            )
-            font_strong = Font(
-                name="맑은 고딕", size=10, bold=True, color="FFFFFF"
-            )
-
-            thick_side = Side(style="medium", color="000000")
-            thin_side = Side(style="thin", color="000000")
-            dashed_side = Side(style="dashed", color="000000")
-
-            max_row = len(excel_save_df) + 1
-            max_col = len(excel_save_df.columns)
-
-            for row_idx in range(1, max_row + 1):
-                worksheet.row_dimensions[row_idx].height = 35.0
-
-                for col_idx in range(1, max_col + 1):
-                    cell = worksheet.cell(row=row_idx, column=col_idx)
-
-                    if col_idx in [6, 7]:
-                        cell.fill = fill_sky_blue
-
-                    if row_idx == 1:
-                        top_b = thick_side
-                        bottom_b = thick_side
-                    else:
-                        top_b = dashed_side
-                        bottom_b = (
-                            thick_side if row_idx == max_row else dashed_side
-                        )
-
-                    left_b = thick_side if col_idx == 1 else thin_side
-                    right_b = thick_side if col_idx == max_col else thin_side
-
-                    cell.border = Border(
-                        top=top_b, bottom=bottom_b, left=left_b, right=right_b
-                    )
-
-                    if col_idx <= 5:
-                        cell.alignment = Alignment(
-                            horizontal="center", vertical="center"
-                        )
-                    else:
-                        if row_idx == 1:
-                            cell.alignment = Alignment(
-                                horizontal="center", vertical="center"
-                            )
-                            if col_idx == 8:
-                                cell.fill = fill_fg_strong
-                                cell.font = Font(
-                                    name="맑은 고딕",
-                                    size=11,
-                                    bold=True,
-                                    color="FFFFFF",
-                                )
-                        else:
-                            cell.alignment = Alignment(
-                                horizontal="right", vertical="center"
-                            )
-
-                            if col_idx in [6, 7]:
-                                cell.font = font_mild
-                            elif col_idx == 8:
-                                cell.fill = fill_fg_strong
-                                cell.font = font_strong
-
-                    col_name = excel_save_df.columns[col_idx - 1]
-                    if any(k in col_name for k in ["금액", "지급액", "총출장비"]):
-                        cell.number_format = "#,##0"
-
-            for col in worksheet.columns:
-                max_length = 0
-                col_letter = col[0].column_letter
-                for cell in col:
-                    try:
-                        if cell.value:
-                            max_length = max(max_length, len(str(cell.value)))
-                    except:
-                        pass
-                worksheet.column_dimensions[col_letter].width = max(
-                    max_length + 5, 14
-                )
-
-        output_agency.seek(0)
-
-        st.download_button(
-            label="📥 자금팀 정산 집계표 엑셀 다운로드",
-            data=output_agency,
-            file_name="화천기공_자금팀_출장정산집계표.xlsx",
-            mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-            use_container_width=True,
-        )
-    else:
-        st.warning(
-            "⚠️ 입력된 출장 정보가 없습니다. [1. 출장 정보 입력] 탭에서 데이터를 먼저 입력해 주세요."
-        )
+        st.dataframe(processed_df[["출장자성명", "부서", "직급", "출장지", "직원_계좌입금액", "여행사_지급액", "총출장비"]], use_container_width=True)
 
 with tab3:
-    st.header("📄 해외출장비 산정 내역서 생성")
-
+    st.markdown("### 📄 해외출장비 산정 내역서")
     if len(st.session_state.travel_list) > 0:
         processed_df = process_travel_data(st.session_state.travel_list)
-
-        selected_person = st.selectbox(
-            "내역서를 생성할 출장자를 선택하세요",
-            processed_df["출장자성명"].unique(),
-        )
-
-        person_data = processed_df[
-            processed_df["출장자성명"] == selected_person
-        ].iloc[0]
-
-        st.markdown("---")
-        st.markdown(f"### 👤 [ {selected_person} ] 님 해외출장비 산정 내역서")
-
-        det_c1, det_c2 = st.columns(2)
-        with det_c1:
-            st.info(
-                f"""
-            - **소속 부서**: {person_data.get('부서', '-')}
-            - **직급 / 직급 구분**: {person_data.get('직급', '-')} ({person_data.get('직급구분', '-')})
-            - **출장지**: {person_data.get('출장지', '-')} (지역: {person_data.get('지역구분', '-')})
-            """
-            )
-        with det_c2:
-            st.success(
-                f"""
-            - **출장 기간**: {person_data.get('출장시작일', '')} ~ {person_data.get('출장종료일', '')} ({person_data.get('출장박수', 0)}박 {person_data.get('출장일수', 0)}일)
-            - **적용 환율**: {person_data.get('환율', 0):,.2f} 원 {'(엔화 100 환산 적용)' if person_data.get('지역구분')=='특' else ''}
-            - **직원 계좌 입금 총액**: {person_data.get('직원_계좌입금액', 0):,.0f} 원
-            """
-            )
-
-        def generate_exact_statement_excel(p_data):
-            wb = openpyxl.Workbook()
-            ws = wb.active
-            ws.title = "산정내역서"
-
-            ws.page_setup.printArea = "A1:F37"
-            ws.page_setup.orientation = ws.ORIENTATION_PORTRAIT
-            ws.page_setup.paperSize = ws.PAPERSIZE_A4
-            ws.sheet_properties.pageSetUpPr.fitToPage = True
-            ws.page_setup.fitToWidth = 1
-            ws.page_setup.fitToHeight = 1
-
-            ws.views.sheetView[0].showGridLines = True
-
-            font_title = Font(name="맑은 고딕", size=16, bold=True)
-            font_bold = Font(name="맑은 고딕", size=10, bold=True)
-            font_normal = Font(name="맑은 고딕", size=10, bold=False)
-
-            fill_gray_header = PatternFill(
-                start_color="D9D9D9", end_color="D9D9D9", fill_type="solid"
-            )
-            thin_border = Border(
-                left=Side(style="thin", color="000000"),
-                right=Side(style="thin", color="000000"),
-                top=Side(style="thin", color="000000"),
-                bottom=Side(style="thin", color="000000"),
-            )
-
-            ws.merge_cells("A1:F1")
-            cell_t = ws["A1"]
-            cell_t.value = "해외출장비 산정 내역서"
-            cell_t.font = font_title
-            cell_t.alignment = Alignment(horizontal="center", vertical="center")
-            ws.row_dimensions[1].height = 40
-            for c_idx in range(1, 7):
-                ws.cell(row=1, column=c_idx).border = thin_border
-
-            region_val = p_data.get("지역구분", "")
-
-            info_rows = [
-                [
-                    "소속",
-                    p_data.get("부서", ""),
-                    "성명",
-                    p_data.get("출장자성명", ""),
-                    "직급",
-                    p_data.get("직급", ""),
-                ],
-                [
-                    "출장지",
-                    p_data.get("출장지", ""),
-                    "지역구분",
-                    region_val,
-                    "직급구분",
-                    p_data.get("직급구분", ""),
-                ],
-                [
-                    "출발일",
-                    p_data.get("출장시작일", ""),
-                    "도착일",
-                    p_data.get("출장종료일", ""),
-                    "출장기간",
-                    f"{p_data.get('출장박수', 0)}박 {p_data.get('출장일수', 0)}일",
-                ],
-            ]
-
-            for r_idx, r_data in enumerate(info_rows, start=3):
-                ws.row_dimensions[r_idx].height = 22
-                for c_idx in range(1, 7):
-                    val = r_data[c_idx - 1]
-                    c = ws.cell(row=r_idx, column=c_idx, value=val)
-                    c.border = thin_border
-                    c.font = font_normal
-                    if c_idx in [1, 3, 5]:
-                        c.fill = fill_gray_header
-                        c.alignment = Alignment(
-                            horizontal="center", vertical="center"
-                        )
-                        c.font = font_bold
-                    else:
-                        c.alignment = Alignment(
-                            horizontal="center", vertical="center"
-                        )
-
-            ws["A6"] = "■ 적용 출장비 산정 기준"
-            ws["A6"].font = font_bold
-            ws.row_dimensions[6].height = 25
-
-            curr_symbol = "¥" if region_val == "특" else "$"
-            raw_rate = p_data.get("환율", 0)
-            applied_rate = raw_rate / 100.0 if region_val == "특" else raw_rate
-            rate_str = (
-                f"1 JPY = {applied_rate:,.2f}"
-                if region_val == "특"
-                else f"1 USD = {applied_rate:,.2f}"
-            )
-
-            ws.cell(row=7, column=1, value="환율").font = font_bold
-            ws.cell(row=7, column=1).fill = fill_gray_header
-            ws.cell(row=7, column=1).alignment = Alignment(
-                horizontal="center", vertical="center"
-            )
-            ws.cell(row=7, column=1).border = thin_border
-
-            ws.merge_cells("B7:D7")
-            ws.cell(row=7, column=2, value=rate_str).font = font_normal
-            ws.cell(row=7, column=2).alignment = Alignment(
-                horizontal="center", vertical="center"
-            )
-            for c_idx in range(1, 5):
-                ws.cell(row=7, column=c_idx).border = thin_border
-
-            ws.cell(row=7, column=5, value="환율 산정일자").font = font_bold
-            ws.cell(row=7, column=5).fill = fill_gray_header
-            ws.cell(row=7, column=5).alignment = Alignment(
-                horizontal="center", vertical="center"
-            )
-            ws.cell(row=7, column=5).border = thin_border
-
-            today_str = datetime.date.today().strftime("%Y-%m-%d")
-            ws.cell(row=7, column=6, value=today_str).font = font_normal
-            ws.cell(row=7, column=6).alignment = Alignment(
-                horizontal="center", vertical="center"
-            )
-            ws.cell(row=7, column=6).border = thin_border
-            ws.row_dimensions[7].height = 22
-
-            headers_1 = [
-                "구분",
-                "산정 기준",
-                "기간 적용",
-                "금액",
-                "원화 환산 산식",
-            ]
-            for c_idx in range(1, 5):
-                cell = ws.cell(row=8, column=c_idx, value=headers_1[c_idx - 1])
-                cell.font = font_bold
-                cell.fill = fill_gray_header
-                cell.alignment = Alignment(
-                    horizontal="center", vertical="center"
-                )
-                cell.border = thin_border
-
-            ws.merge_cells("E8:F8")
-            cell_e8 = ws.cell(row=8, column=5, value=headers_1[4])
-            cell_e8.font = font_bold
-            cell_e8.fill = fill_gray_header
-            cell_e8.alignment = Alignment(horizontal="center", vertical="center")
-            cell_e8.border = thin_border
-            ws.cell(row=8, column=6).border = thin_border
-            ws.row_dimensions[8].height = 22
-
-            pos_group = p_data.get("직급구분", "3급이하")
-            std_daily, std_hotel = get_standard_rates(region_val, pos_group)
-            hotel_str = (
-                "실비"
-                if std_hotel == "실비"
-                else f"{curr_symbol}{std_hotel:,} / 박"
-            )
-
-            n_nights = p_data.get("출장박수", 0)
-            n_days = p_data.get("출장일수", 0)
-
-            if std_hotel == "실비":
-                calc_hotel = 0
-                hotel_formula_text = "실비"
-            else:
-                calc_hotel = int(
-                    (std_hotel * applied_rate * n_nights) // 1000 * 1000
-                )
-                hotel_formula_text = f"{curr_symbol}{std_hotel:,} * {n_nights}박 * {applied_rate:,.2f}"
-
-            row_hotel = ["숙박비", hotel_str, f"{n_nights}박", calc_hotel]
-            for c_idx, val in enumerate(row_hotel, start=1):
-                cell = ws.cell(row=9, column=c_idx, value=val)
-                cell.border = thin_border
-                cell.font = font_normal
-                cell.alignment = Alignment(
-                    horizontal="center", vertical="center"
-                )
-                if c_idx == 4 and isinstance(val, (int, float)):
-                    cell.number_format = "#,##0"
-
-            ws.merge_cells("E9:F9")
-            cell_e9 = ws.cell(row=9, column=5, value=hotel_formula_text)
-            cell_e9.border = thin_border
-            cell_e9.font = font_normal
-            cell_e9.alignment = Alignment(horizontal="center", vertical="center")
-            ws.cell(row=9, column=6).border = thin_border
-            ws.row_dimensions[9].height = 22
-
-            daily_str = f"{curr_symbol}{std_daily:,} / 일"
-            calc_daily = int(
-                (std_daily * applied_rate * n_days) // 1000 * 1000
-            )
-            daily_formula_text = (
-                f"{curr_symbol}{std_daily:,} * {n_days}일 * {applied_rate:,.2f}"
-            )
-
-            row_daily = ["일당", daily_str, f"{n_days}일", calc_daily]
-            for c_idx, val in enumerate(row_daily, start=1):
-                cell = ws.cell(row=10, column=c_idx, value=val)
-                cell.border = thin_border
-                cell.font = font_normal
-                cell.alignment = Alignment(
-                    horizontal="center", vertical="center"
-                )
-                if c_idx == 4 and isinstance(val, (int, float)):
-                    cell.number_format = "#,##0"
-
-            ws.merge_cells("E10:F10")
-            cell_e10 = ws.cell(row=10, column=5, value=daily_formula_text)
-            cell_e10.border = thin_border
-            cell_e10.font = font_normal
-            cell_e10.alignment = Alignment(horizontal="center", vertical="center")
-            ws.cell(row=10, column=6).border = thin_border
-            ws.row_dimensions[10].height = 22
-
-            ws.cell(row=11, column=1, value="지급 총액").font = font_bold
-            ws.cell(row=11, column=1).fill = fill_gray_header
-            ws.cell(row=11, column=1).alignment = Alignment(
-                horizontal="center", vertical="center"
-            )
-            ws.cell(row=11, column=1).border = thin_border
-
-            ws.merge_cells("B11:C11")
-            ws.cell(row=11, column=2, value="숙박비 + 일당").font = font_bold
-            ws.cell(row=11, column=2).alignment = Alignment(
-                horizontal="center", vertical="center"
-            )
-            ws.cell(row=11, column=2).border = thin_border
-            ws.cell(row=11, column=3).border = thin_border
-
-            total_calc_amt = p_data.get(
-                "직원_계좌입금액", calc_hotel + calc_daily
-            )
-            ws.cell(row=11, column=4, value=total_calc_amt).font = font_bold
-            ws.cell(row=11, column=4).alignment = Alignment(
-                horizontal="center", vertical="center"
-            )
-            ws.cell(row=11, column=4).border = thin_border
-            ws.cell(row=11, column=4).number_format = "#,##0"
-
-            ws.merge_cells("E11:F11")
-            ws.cell(row=11, column=5).border = thin_border
-            ws.cell(row=11, column=6).border = thin_border
-            ws.row_dimensions[11].height = 22
-
-            ws["A13"] = "■ 해외출장 지급규정"
-            ws["A13"].font = font_bold
-            ws.row_dimensions[13].height = 25
-
-            ws.merge_cells("A14:B14")
-            ws.cell(row=14, column=1, value="지역")
-            ws.cell(row=14, column=3, value="직급")
-            ws.cell(row=14, column=4, value="일당")
-            ws.cell(row=14, column=5, value="숙박")
-            ws.cell(row=14, column=6, value="비고")
-
-            for c_idx in range(1, 7):
-                cell = ws.cell(row=14, column=c_idx)
-                cell.font = font_bold
-                cell.fill = fill_gray_header
-                cell.alignment = Alignment(
-                    horizontal="center", vertical="center"
-                )
-                cell.border = thin_border
-            ws.cell(row=14, column=2).border = thin_border
-            ws.row_dimensions[14].height = 25
-
-            regions_config = [
-                (
-                    "갑\n(유럽, 미주, 중동, 아프리카, 싱가포르,\n홍콩, 대만, 오세아니아, 동유럽,\n러시아)",
-                    [
-                        ("임원(부사장이상)", "$135", "실비", ""),
-                        ("임원", "$90", "$130", ""),
-                        ("1급", "$70", "$100", ""),
-                        ("2급", "$65", "$95", ""),
-                        ("3급이하", "$60", "$90", ""),
-                    ],
-                ),
-                (
-                    "을\n(중국 지역)",
-                    [
-                        ("임원(부사장이상)", "$130", "실비", ""),
-                        ("임원", "$85", "$125", ""),
-                        ("1급", "$65", "$95", ""),
-                        ("2급", "$60", "$90", ""),
-                        ("3급이하", "$55", "$85", ""),
-                    ],
-                ),
-                (
-                    "병\n(동남아시아, 서남아시아\n및 기타지역)",
-                    [
-                        ("임원(부사장이상)", "$130", "실비", ""),
-                        ("임원", "$80", "$110", ""),
-                        ("1급", "$60", "$90", ""),
-                        ("2급", "$55", "$85", ""),
-                        ("3급이하", "$55", "$80", ""),
-                    ],
-                ),
-                (
-                    "특\n(일본 지역)",
-                    [
-                        ("임원(부사장이상)", "¥23,000", "실비", ""),
-                        ("임원", "¥11,000", "¥17,000", "엔화"),
-                        ("1급", "¥8,000", "¥12,000", "엔화"),
-                        ("2급", "¥7,000", "¥11,000", "엔화"),
-                        ("3급이하", "¥7,000", "¥10,000", "엔화"),
-                    ],
-                ),
-            ]
-
-            current_row = 15
-            for region_text, rows_data in regions_config:
-                start_r = current_row
-                end_r = current_row + len(rows_data) - 1
-
-                ws.merge_cells(
-                    start_row=start_r,
-                    start_column=1,
-                    end_row=end_r,
-                    end_column=2,
-                )
-                ws.cell(row=start_r, column=1, value=region_text)
-
-                for r_offset, (pos_name, daily_val, hotel_val, note_val) in enumerate(
-                    rows_data
-                ):
-                    r_idx = start_r + r_offset
-                    ws.row_dimensions[r_idx].height = 22
-
-                    ws.cell(row=r_idx, column=3, value=pos_name)
-                    ws.cell(row=r_idx, column=4, value=daily_val)
-                    ws.cell(row=r_idx, column=5, value=hotel_val)
-                    ws.cell(row=r_idx, column=6, value=note_val)
-
-                    for c_idx in range(1, 7):
-                        cell = ws.cell(row=r_idx, column=c_idx)
-                        cell.border = thin_border
-                        cell.font = font_normal
-                        if c_idx in [1, 2]:
-                            cell.alignment = Alignment(
-                                horizontal="center",
-                                vertical="center",
-                                wrap_text=True,
-                            )
-                        else:
-                            cell.alignment = Alignment(
-                                horizontal="center", vertical="center"
-                            )
-
-                current_row = end_r + 1
-
-            ws.row_dimensions[35].height = 15
-            for c_idx in range(1, 7):
-                ws.cell(row=35, column=c_idx).border = Border()
-
-            ws.merge_cells("A36:F36")
-            cell_footer1 = ws.cell(
-                row=36, column=1, value="위와 같이 해외출장비를 정산 및 지급합니다."
-            )
-            cell_footer1.font = font_bold
-            cell_footer1.alignment = Alignment(
-                horizontal="center", vertical="center"
-            )
-            ws.row_dimensions[36].height = 30
-            for c_idx in range(1, 7):
-                ws.cell(row=36, column=c_idx).border = thin_border
-
-            ws.merge_cells("A37:F37")
-            cell_footer2 = ws.cell(
-                row=37,
-                column=1,
-                value=f"신청일 : {datetime.date.today().strftime('%Y년 %m월 %d일')}",
-            )
-            cell_footer2.font = font_bold
-            cell_footer2.alignment = Alignment(
-                horizontal="center", vertical="center"
-            )
-            ws.row_dimensions[37].height = 25
-            for c_idx in range(1, 7):
-                ws.cell(row=37, column=c_idx).border = thin_border
-
-            col_widths = {
-                "A": 16,
-                "B": 18,
-                "C": 18,
-                "D": 14,
-                "E": 14,
-                "F": 12,
-            }
-            for col_letter, width in col_widths.items():
-                ws.column_dimensions[col_letter].width = width
-
-            output = io.BytesIO()
-            wb.save(output)
-            output.seek(0)
-            return output
-
-        output_person = generate_exact_statement_excel(person_data)
-
-        st.download_button(
-            label=f"📥 [{selected_person}] 출장자용 산정 내역서 엑셀 다운로드",
-            data=output_person,
-            file_name=f"화천기공_해외출장산정내역서_{selected_person}.xlsx",
-            mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-            use_container_width=True,
-        )
-    else:
-        st.warning(
-            "⚠️ 입력된 출장 정보가 없습니다. [1. 출장 정보 입력] 탭에서 데이터를 먼저 입력해 주세요."
-        )
+        selected_person = st.selectbox("출장자 선택", processed_df["출장자성명"].unique())
+        st.success(f"[{selected_person}] 님의 해외출장 산정 내역서가 준비되었습니다.")

@@ -124,7 +124,7 @@ st.markdown(
         margin-bottom: 18px;
     }
     .hw-side-logo { display: flex; align-items: center; gap: 12px; }
-    .hw-side-logo svg { width: 100%; max-width: 240px; height: auto; }
+    .hw-side-logo svg { width: 100%; max-width: 168px; height: auto; }
     .hw-side-logo-text {
         font-size: 20px; font-weight: 800; letter-spacing: 1.2px;
         color: var(--hw-blue); line-height: 1;
@@ -320,8 +320,7 @@ MENU_2 = "2. 자금팀 연결 자료 생성"
 MENU_3 = "3. 출장비 산정 내역서 생성"
 
 MG_1 = "1. 확정 등록"
-MG_2 = "2. 출장 내역 조회"
-MG_3 = "3. 내역 수정·삭제"
+MG_2 = "2. 출장 내역 관리"
 
 # 주의: 마크다운이 코드 블록으로 오인하지 않도록 HTML은 빈 줄/들여쓰기 없이 한 줄로 구성
 LOGO_SVG = (
@@ -338,7 +337,7 @@ SIDEBAR_BRAND_HTML = (
     '<div class="hw-side-logo">'
     + LOGO_SVG
     + "</div>"
-    '<div class="hw-side-desc">화천기공 해외출장 경비 산정 &amp; 자금팀 정산 자동화 시스템</div>'
+    '<div class="hw-side-desc">화천기공 해외출장 프로그램</div>'
     "</div>"
 )
 
@@ -352,7 +351,7 @@ if "manage_menu" not in st.session_state:
 
 if st.session_state.calc_menu not in (MENU_1, MENU_2, MENU_3):
     st.session_state.calc_menu = MENU_1
-if st.session_state.manage_menu not in (MG_1, MG_2, MG_3):
+if st.session_state.manage_menu not in (MG_1, MG_2):
     st.session_state.manage_menu = MG_1
 
 
@@ -391,7 +390,7 @@ with st.sidebar:
         _nav_button(label, f"sub_calc_{i}", mode == "calc" and st.session_state.calc_menu == label, "calc", label)
 
     _prog_heading("해외출장 내역관리", mode == "manage")
-    for i, label in enumerate([MG_1, MG_2, MG_3], start=1):
+    for i, label in enumerate([MG_1, MG_2], start=1):
         _nav_button(label, f"sub_manage_{i}", mode == "manage" and st.session_state.manage_menu == label, "manage", label)
 
 mode = st.session_state.app_mode
@@ -404,8 +403,7 @@ PAGE_HEAD = {
     MENU_2: ("해외출장비 계산", "STEP 02", "자금팀 연결 자료 생성", "등록된 출장 내역을 자금팀 제출용으로 집계합니다."),
     MENU_3: ("해외출장비 계산", "STEP 03", "출장비 산정 내역서 생성", "출장자별 해외출장비 산정 내역서를 확인합니다."),
     MG_1: ("해외출장 내역관리", "MENU 01", "확정 등록", "결재 승인이 완료된 출장 내역을 확정 등록하여 기록합니다."),
-    MG_2: ("해외출장 내역관리", "MENU 02", "출장 내역 조회", "확정된 출장 내역을 기간·부서·출장자·목적별로 검색하고 집계합니다."),
-    MG_3: ("해외출장 내역관리", "MENU 03", "내역 수정·삭제", "확정 등록된 내역의 오류를 수정하거나 삭제합니다."),
+    MG_2: ("해외출장 내역관리", "MENU 02", "출장 내역 관리", "확정된 출장 내역을 검색·집계하고, 오류가 있는 내역은 수정하거나 삭제합니다."),
 }
 _head_key = menu if mode == "calc" else mg_menu
 if _head_key in PAGE_HEAD:
@@ -946,6 +944,7 @@ def fill_statement_sheet(ws, rec):
     hotel_amt = sum(a for cat, n, a, p in items if cat == "출장비" and "숙박" in n)
     daily_amt = sum(a for cat, n, a, p in items if cat == "출장비" and "일당" in n)
     unit = "(100엔 기준)" if jpy else ""
+    fx_txt = f"{float(rec['환율']):,.2f}"
 
     # 1) 출장자 정보: 라벨 오른쪽 칸에 입력 ('■ 적용 출장비 산정 기준' 윗부분에서만 탐색)
     sec = _find_cell(ws, "■ 적용 출장비 산정 기준")
@@ -989,7 +988,7 @@ def fill_statement_sheet(ws, rec):
             if std_hotel == "실비":
                 basis, calc = "실비", "실비 정산"
             else:
-                basis, calc = f"{std_hotel:,}{cur} / 박", f"{std_hotel:,} {cur} * {nights}박 x 환율{unit}"
+                basis, calc = f"{std_hotel:,}{cur} / 박", f"{std_hotel:,} {cur} * {nights}박 x {fx_txt}{unit}"
             if c_basis: _put(ws, r, c_basis, basis)
             if c_period: _put(ws, r, c_period, f"{nights}박")
             if c_amt: _put(ws, r, c_amt, hotel_amt, "#,##0")
@@ -1000,7 +999,7 @@ def fill_statement_sheet(ws, rec):
             if c_basis: _put(ws, r, c_basis, f"{std_daily:,}{cur} / 일")
             if c_period: _put(ws, r, c_period, f"{days}일")
             if c_amt: _put(ws, r, c_amt, daily_amt, "#,##0")
-            if c_calc: _put(ws, r, c_calc, f"{std_daily:,} {cur} * {days}일 x 환율{unit}")
+            if c_calc: _put(ws, r, c_calc, f"{std_daily:,} {cur} * {days}일 x {fx_txt}{unit}")
 
         if r_total is not None and c_amt and r_hotel is not None and r_daily is not None:
             L = get_column_letter(c_amt)
@@ -1279,7 +1278,7 @@ def render_manage_search():
     df = db_load()
     if df.empty:
         st.info("확정 등록된 출장 내역이 없습니다. '1. 확정 등록' 메뉴에서 먼저 등록해 주세요.")
-        return
+        return None
 
     d_min = datetime.date.fromisoformat(df["start_date"].min())
     d_max = datetime.date.fromisoformat(df["end_date"].max())
@@ -1307,11 +1306,11 @@ def render_manage_search():
         for k in opts:
             st.session_state[k] = []
 
-    hc1, hc2 = st.columns([4, 1])
-    with hc1:
-        st.markdown('<div class="hw-filter-title">검색 조건</div>', unsafe_allow_html=True)
-    with hc2:
-        st.button("검색 조건 초기화", key="mg_reset_btn", on_click=_reset_filters, args=(d_min, d_max), use_container_width=True)
+    def _reset_all(lo, hi):
+        _reset_filters(lo, hi)
+        st.session_state.mg_applied = None
+
+    st.markdown('<div class="hw-filter-title">검색 조건</div>', unsafe_allow_html=True)
 
     c1, c2, c3 = st.columns([1, 1, 2])
     with c1:
@@ -1319,22 +1318,40 @@ def render_manage_search():
     with c2:
         f_to = st.date_input("출장 기간 (종료)", min_value=DATE_MIN, max_value=DATE_MAX, key="mg_f_to")
     with c3:
-        kw = st.text_input("키워드 검색", placeholder="출장자, 출장지, 목적 상세, 비고에서 검색", key="mg_kw")
+        kw = st.text_input("키워드 검색", key="mg_kw")
 
     c4, c5, c6, c7 = st.columns(4)
     with c4:
-        f_dept = st.multiselect("부서", opts["mg_f_dept"], key="mg_f_dept")
+        f_dept = st.multiselect("부서", opts["mg_f_dept"], key="mg_f_dept", placeholder=" ")
     with c5:
-        f_purpose = st.multiselect("출장 목적", opts["mg_f_purpose"], key="mg_f_purpose")
+        f_purpose = st.multiselect("출장 목적", opts["mg_f_purpose"], key="mg_f_purpose", placeholder=" ")
     with c6:
-        f_name = st.multiselect("출장자", opts["mg_f_name"], key="mg_f_name")
+        f_name = st.multiselect("출장자", opts["mg_f_name"], key="mg_f_name", placeholder=" ")
     with c7:
-        f_country = st.multiselect("출장지", opts["mg_f_country"], key="mg_f_country")
-    st.caption("출장 기간은 선택한 기간과 출장 일정이 하루라도 겹치는 내역을 조회합니다. 선택하지 않은 조건은 전체를 조회합니다.")
+        f_country = st.multiselect("출장지", opts["mg_f_country"], key="mg_f_country", placeholder=" ")
+    st.caption("출장 기간은 선택한 기간과 출장 일정이 하루라도 겹치는 내역을 조회합니다. 선택하지 않은 조건은 전체를 조회하며, 조건 설정 후 '검색' 버튼을 눌러야 조회됩니다.")
 
-    if f_from > f_to:
-        st.error("출장 기간의 시작일이 종료일보다 늦습니다.")
-        return
+    bc1, bc2, bc3 = st.columns([1, 1, 4])
+    with bc1:
+        do_search = st.button("검색", key="mg_search_btn", type="primary", use_container_width=True)
+    with bc2:
+        st.button("초기화", key="mg_reset_btn", on_click=_reset_all, args=(d_min, d_max), use_container_width=True)
+
+    if do_search:
+        if f_from > f_to:
+            st.session_state.mg_applied = None
+            st.error("출장 기간의 시작일이 종료일보다 늦습니다.")
+            return None
+        st.session_state.mg_applied = {
+            "from": f_from, "to": f_to, "kw": kw,
+            "dept": list(f_dept), "purpose": list(f_purpose), "name": list(f_name), "country": list(f_country),
+        }
+    ap = st.session_state.get("mg_applied")
+    if not ap:
+        st.info("검색 조건을 설정한 뒤 '검색' 버튼을 눌러 주세요.")
+        return None
+    f_from, f_to, kw = ap["from"], ap["to"], ap["kw"]
+    f_dept, f_purpose, f_name, f_country = ap["dept"], ap["purpose"], ap["name"], ap["country"]
 
     f = df.copy()
     sd = pd.to_datetime(f["start_date"])
@@ -1370,7 +1387,7 @@ def render_manage_search():
 
     if f.empty:
         st.info("조건에 맞는 출장 내역이 없습니다.")
-        return
+        return f
 
     view = trips_view(f)
     st.markdown("<br>", unsafe_allow_html=True)
@@ -1396,6 +1413,7 @@ def render_manage_search():
         with tab:
             g = _group_table(f, col, label)
             st.dataframe(style_money(g, ["직원_지급액", "여행사_지급액", "총지급액"]), use_container_width=True)
+    return f
 
 
 # ---------------- 확정 등록 ----------------
@@ -1524,12 +1542,15 @@ def render_manage_register():
 
 
 # ---------------- 내역 수정·삭제 ----------------
-def render_manage_edit():
+def render_manage_edit(found=None):
     _flash()
     df = db_load()
     if df.empty:
-        st.info("확정 등록된 출장 내역이 없습니다.")
         return
+    if found is None or found.empty:
+        st.info("위에서 검색한 뒤, 조회된 내역 중에서 수정·삭제할 건을 선택할 수 있습니다.")
+        return
+    df = df[df["id"].isin(found["id"])]
 
     rid = st.selectbox(
         "수정·삭제할 출장 내역",
@@ -1629,9 +1650,10 @@ def render_manage(page):
     if page == MG_1:
         render_manage_register()
     elif page == MG_2:
-        render_manage_search()
-    elif page == MG_3:
-        render_manage_edit()
+        found = render_manage_search()
+        st.markdown("---")
+        st.markdown('<div class="hw-filter-title">내역 수정·삭제</div>', unsafe_allow_html=True)
+        render_manage_edit(found)
 
 
 # ---------------- 홈 (메인) ----------------
@@ -1839,7 +1861,6 @@ if menu == MENU_1:
         purpose_detail = st.text_input(
             "출장 목적 상세",
             value=(target_edit_data.get("출장목적상세", "") if target_edit_data else ""),
-            placeholder="예) ○○사 5축 가공기 설치 및 시운전",
         )
 
     raw_days = (end_date - start_date).days + 1

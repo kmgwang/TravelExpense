@@ -24,98 +24,161 @@ try:
     st.set_page_config(
         page_title="HWACHEON - 해외출장비 정산 자동화 시스템",
         page_icon="✈️",
-        page_layout="wide",
+        layout="wide",
+        initial_sidebar_state="expanded",
     )
 except Exception:
     pass
 
 # ----------------------------------------------------
-# 2. 화천(HWACHEON) 브랜드 맞춤 커스텀 CSS 적용
+# 2. 화천(HWACHEON) 홈페이지 스타일 커스텀 CSS
+#    브랜드 컬러: PANTONE 2728C / C96 M69 Y0 K0 / R0 G92 B171 (#005CAB)
 # ----------------------------------------------------
 st.markdown(
     """
     <style>
     @import url('https://cdn.jsdelivr.net/gh/orioncactus/pretendard/dist/web/static/pretendard.css');
-    
-    * {
-        font-family: 'Pretendard', -apple-system, BlinkMacSystemFont, system-ui, Roboto, 'Helvetica Neue', 'Segoe UI', 'Apple SD Gothic Neo', 'Malgun Gothic', sans-serif !important;
+
+    :root {
+        --hw-blue: #005CAB;
+        --hw-blue-dark: #004A8C;
+        --hw-blue-soft: #EAF2FA;
+        --hw-gray-bg: #F5F6F8;
+        --hw-line: #E5E7EB;
+        --hw-text: #1F2328;
+        --hw-text-sub: #6B7280;
+    }
+
+    /* 폰트 (아이콘 폰트가 깨지지 않도록 span 은 제외) */
+    html, body, .stApp, .stApp p, .stApp label, .stApp input, .stApp textarea,
+    .stApp button, .stApp h1, .stApp h2, .stApp h3, .stApp h4, .stApp h5,
+    .stApp td, .stApp th, .stApp li, .stApp a, .stApp div[data-baseweb] {
+        font-family: 'Pretendard', -apple-system, BlinkMacSystemFont, system-ui, Roboto,
+                     'Helvetica Neue', 'Segoe UI', 'Apple SD Gothic Neo', 'Malgun Gothic', sans-serif;
     }
 
     /* 메인 배경 및 레이아웃 */
-    .stApp {
-        background-color: #f8f9fa;
-    }
-    
+    .stApp { background-color: #ffffff; color: var(--hw-text); }
+    header[data-testid="stHeader"] { background: transparent; }
     .block-container {
         max-width: 1200px !important;
-        padding-top: 1.5rem;
-        padding-bottom: 3rem;
-        padding-left: 1.5rem;
-        padding-right: 1.5rem;
+        padding-top: 2.5rem;
+        padding-bottom: 4rem;
+        padding-left: 2.5rem;
+        padding-right: 2.5rem;
     }
 
-    /* 화천 헤더 패널 */
-    .hwacheon-header {
+    /* ---------- 사이드바 ---------- */
+    section[data-testid="stSidebar"] {
         background-color: #ffffff;
-        padding: 24px 32px;
-        border-radius: 12px;
-        border: 1px solid #e5e7eb;
-        margin-bottom: 24px;
-        box-shadow: 0 2px 8px rgba(0,0,0,0.03);
-        display: flex;
-        justify-content: space-between;
-        align-items: center;
+        border-right: 1px solid var(--hw-line);
+        min-width: 290px;
+        max-width: 290px;
     }
-    .hwacheon-brand {
+    section[data-testid="stSidebar"] > div:first-child { padding-top: 0.5rem; }
+
+    .hw-side-logo {
         display: flex;
         align-items: center;
         gap: 12px;
+        padding: 18px 8px 22px 8px;
+        border-bottom: 1px solid var(--hw-line);
+        margin-bottom: 22px;
     }
-    .hwacheon-logo-text {
-        font-size: 26px;
+    .hw-side-logo svg { height: 30px; width: auto; flex-shrink: 0; }
+    .hw-side-logo-text {
+        font-size: 22px;
         font-weight: 800;
-        color: #0055A5;
+        letter-spacing: 1.5px;
+        color: var(--hw-blue);
+        line-height: 1;
+    }
+    .hw-side-caption {
+        font-size: 12px;
+        font-weight: 600;
+        letter-spacing: 1px;
+        color: var(--hw-text-sub);
+        padding: 0 8px 10px 8px;
+    }
+    .hw-side-foot {
+        font-size: 12px;
+        color: var(--hw-text-sub);
+        padding: 28px 8px 0 8px;
+        line-height: 1.6;
+        border-top: 1px solid var(--hw-line);
+        margin-top: 28px;
+    }
+
+    /* 사이드바 메뉴 (라디오 → 메뉴 리스트) */
+    section[data-testid="stSidebar"] div[role="radiogroup"] {
+        gap: 6px;
+        width: 100%;
+    }
+    section[data-testid="stSidebar"] div[role="radiogroup"] > label {
+        width: 100%;
+        padding: 14px 18px;
+        border-radius: 12px;
+        background-color: transparent;
+        cursor: pointer;
+        transition: background-color 0.15s ease;
+        margin: 0;
+    }
+    section[data-testid="stSidebar"] div[role="radiogroup"] > label > div:first-child {
+        display: none;               /* 라디오 동그라미 숨김 */
+    }
+    section[data-testid="stSidebar"] div[role="radiogroup"] > label p {
+        font-size: 16px;
+        font-weight: 600;
+        color: var(--hw-text);
+    }
+    section[data-testid="stSidebar"] div[role="radiogroup"] > label:hover {
+        background-color: var(--hw-gray-bg);
+    }
+    section[data-testid="stSidebar"] div[role="radiogroup"] > label:has(input:checked) {
+        background-color: var(--hw-blue);
+    }
+    section[data-testid="stSidebar"] div[role="radiogroup"] > label:has(input:checked) p {
+        color: #ffffff;
+    }
+
+    /* ---------- 페이지 헤드 ---------- */
+    .hw-page-head {
+        padding-bottom: 18px;
+        border-bottom: 1px solid var(--hw-line);
+        margin-bottom: 28px;
+    }
+    .hw-page-eyebrow {
+        font-size: 13px;
+        font-weight: 700;
+        letter-spacing: 1.2px;
+        color: var(--hw-blue);
+        margin-bottom: 6px;
+    }
+    .hw-page-title {
+        font-size: 30px;
+        font-weight: 800;
+        color: var(--hw-text);
         letter-spacing: -0.5px;
     }
-    .hwacheon-subtitle {
-        color: #6b7280;
+    .hw-page-sub {
+        color: var(--hw-text-sub);
         font-size: 14px;
-        margin-top: 4px;
+        margin-top: 6px;
     }
 
-    /* Streamlit Tab 스타일링 */
-    .stTabs [data-baseweb="tab-list"] {
-        gap: 8px;
-        background-color: #ffffff;
-        padding: 8px;
-        border-radius: 12px;
-        border: 1px solid #e5e7eb;
+    /* 제목 */
+    .stApp h3 {
+        font-weight: 800;
+        letter-spacing: -0.3px;
+        color: var(--hw-text);
     }
 
-    .stTabs [data-baseweb="tab"] {
-        height: 48px;
-        border-radius: 8px;
-        padding: 0px 24px;
-        font-weight: 600;
-        font-size: 15px;
-        color: #4b5563;
-        background-color: transparent;
-        border: none !important;
-    }
-
-    .stTabs [aria-selected="true"] {
-        background-color: #0055A5 !important;
-        color: #ffffff !important;
-    }
-
-    /* 카드 스타일 섹션 */
+    /* 카드 스타일 섹션 (홈페이지 게시물 카드 느낌) */
     .hw-card {
-        background: #ffffff;
-        padding: 24px;
-        border-radius: 12px;
-        border: 1px solid #e5e7eb;
+        background: var(--hw-gray-bg);
+        padding: 28px;
+        border-radius: 20px;
         margin-bottom: 20px;
-        box-shadow: 0 1px 3px rgba(0,0,0,0.02);
     }
 
     /* 하이라이트 박스 */
@@ -123,59 +186,139 @@ st.markdown(
         background-color: #FEE2E2;
         color: #991B1B;
         padding: 10px 14px;
-        border-radius: 8px;
+        border-radius: 10px;
         font-weight: 600;
     }
-
     .row-highlight-blue {
-        background-color: #EFF6FF;
-        border: 1px solid #BFDBFE;
-        color: #1E40AF;
+        background-color: var(--hw-blue-soft);
+        border: none;
+        color: var(--hw-blue);
         padding: 12px 16px;
-        border-radius: 8px;
+        border-radius: 10px;
         font-size: 16px;
     }
 
-    /* 버튼 커스텀 */
-    .stButton>button {
-        background-color: #0055A5;
-        color: white;
-        border-radius: 8px;
-        border: none;
-        font-weight: 600;
-        padding: 10px 20px;
-        transition: all 0.2s ease;
+    /* 입력 필드 (홈페이지 검색창 스타일) */
+    div[data-baseweb="input"],
+    div[data-baseweb="base-input"],
+    div[data-baseweb="select"] > div,
+    div[data-testid="stDateInput"] div[data-baseweb="input"] {
+        background-color: var(--hw-gray-bg) !important;
+        border: 1px solid transparent !important;
+        border-radius: 10px !important;
     }
-    
-    .stButton>button:hover {
-        background-color: #003F7D;
-        color: white;
+    div[data-baseweb="input"]:focus-within,
+    div[data-baseweb="select"] > div:focus-within {
+        border: 1px solid var(--hw-blue) !important;
+        background-color: #ffffff !important;
     }
+    div[data-baseweb="input"] input { background-color: transparent !important; }
+    div[data-testid="stNumberInput"] button { background-color: transparent; }
 
     /* Input 텍스트 비주얼 개선 */
-    input[aria-label*="항목"] {
-        text-align: center !important;
+    input[aria-label*="항목"] { text-align: center !important; }
+    input[aria-label*="금액"] { text-align: right !important; }
+
+    /* 버튼 */
+    .stButton > button {
+        background-color: var(--hw-blue);
+        color: #ffffff;
+        border-radius: 10px;
+        border: none;
+        font-weight: 600;
+        padding: 10px 22px;
+        transition: all 0.2s ease;
     }
-    input[aria-label*="금액"] {
-        text-align: right !important;
+    .stButton > button:hover {
+        background-color: var(--hw-blue-dark);
+        color: #ffffff;
+        border: none;
     }
+    .stButton > button:focus:not(:active) { color: #ffffff; border: none; }
+
+    /* 체크박스 포인트 컬러 */
+    label[data-baseweb="checkbox"] > span:first-child[data-checked="true"],
+    div[data-baseweb="checkbox"] > div[aria-checked="true"] {
+        background-color: var(--hw-blue) !important;
+    }
+
+    /* 알림 박스 */
+    div[data-testid="stAlert"] { border-radius: 12px; }
+
+    /* 메트릭 카드 */
+    div[data-testid="stMetric"] {
+        background-color: var(--hw-gray-bg);
+        border-radius: 20px;
+        padding: 22px 26px;
+    }
+    div[data-testid="stMetricLabel"] p { color: var(--hw-text-sub); font-weight: 600; }
+    div[data-testid="stMetricValue"] { color: var(--hw-blue); font-weight: 800; }
+
+    /* 구분선 */
+    .stApp hr { border-color: var(--hw-line); }
+
+    /* 링크 */
+    .stApp a { color: var(--hw-blue); }
     </style>
 """,
     unsafe_allow_html=True,
 )
 
 # ----------------------------------------------------
-# 3. 화천 상단 브랜드 헤더 영역 UI
+# 3. 사이드바 (로고 + 메뉴 내비게이션)
 # ----------------------------------------------------
-st.markdown(
-    """
-    <div class="hwacheon-header">
-        <div class="hwacheon-brand">
-            <div>
-                <div class="hwacheon-logo-text">HWACHEON</div>
-                <div class="hwacheon-subtitle">화천기공 해외출장 경비 산정 & 자금팀 정산 자동화 시스템</div>
-            </div>
+MENU_1 = "1. 출장 정보 입력"
+MENU_2 = "2. 자금팀 연결 자료 생성"
+MENU_3 = "3. 출장비 산정 내역서 생성"
+
+LOGO_SVG = """
+<svg viewBox="0 53 906 264" xmlns="http://www.w3.org/2000/svg" aria-label="HWACHEON">
+  <rect x="0"   y="53"  width="88"  height="264" fill="#005CAB"/>
+  <rect x="193" y="53"  width="519" height="88"  fill="#005CAB"/>
+  <rect x="193" y="229" width="519" height="88"  fill="#005CAB"/>
+  <rect x="818" y="53"  width="88"  height="264" fill="#005CAB"/>
+</svg>
+"""
+
+with st.sidebar:
+    st.markdown(
+        f"""
+        <div class="hw-side-logo">
+            {LOGO_SVG}
+            <div class="hw-side-logo-text">HWACHEON</div>
         </div>
+        <div class="hw-side-caption">MENU</div>
+        """,
+        unsafe_allow_html=True,
+    )
+    menu = st.radio(
+        "메뉴",
+        [MENU_1, MENU_2, MENU_3],
+        key="nav_menu",
+        label_visibility="collapsed",
+    )
+    st.markdown(
+        """
+        <div class="hw-side-foot">
+            화천기공 해외출장 경비 산정 &amp;<br>자금팀 정산 자동화 시스템
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
+
+# 페이지 상단 헤드
+PAGE_HEAD = {
+    MENU_1: ("STEP 01", "출장 정보 입력", "출장자 정보와 경비 항목을 입력하고 등록합니다."),
+    MENU_2: ("STEP 02", "자금팀 연결 자료 생성", "등록된 출장 내역을 자금팀 제출용으로 집계합니다."),
+    MENU_3: ("STEP 03", "출장비 산정 내역서 생성", "출장자별 해외출장비 산정 내역서를 확인합니다."),
+}
+_eyebrow, _title, _sub = PAGE_HEAD[menu]
+st.markdown(
+    f"""
+    <div class="hw-page-head">
+        <div class="hw-page-eyebrow">{_eyebrow}</div>
+        <div class="hw-page-title">{_title}</div>
+        <div class="hw-page-sub">{_sub}</div>
     </div>
     """,
     unsafe_allow_html=True,
@@ -231,7 +374,7 @@ def get_region_group(country):
     elif any(
         x in country
         for x in [
-            "베트남", "태국", "말레이시아", "인도네시아", "필리핀", 
+            "베트남", "태국", "말레이시아", "인도네시아", "필리핀",
             "싱가포르", "인도", "파키스탄", "방글라데시", "카자흐스탄", "우즈베키스탄",
         ]
     ):
@@ -364,17 +507,9 @@ def process_travel_data(data_list):
 
 
 # ----------------------------------------------------
-# 4. 탭 구성
+# 4. 페이지 구성 (사이드바 메뉴 선택에 따라 표시)
 # ----------------------------------------------------
-tab1, tab2, tab3 = st.tabs(
-    [
-        "📋 1. 출장 정보 입력",
-        "💰 2. 자금팀 연결 자료 생성",
-        "📄 3. 출장비 산정 내역서 생성",
-    ]
-)
-
-with tab1:
+if menu == MENU_1:
     st.markdown("### 📋 출장 기본 정보 입력")
     if st.session_state.edit_target_index is not None:
         st.info(
@@ -625,7 +760,9 @@ with tab1:
             te_name = st.text_input(f"출장비 항목 {idx}", value=row_data["item"], key=f"te_item_{idx}", label_visibility="collapsed")
         with tec3:
             key_prefix = f"te_amt_str_{idx}"
-            if key_prefix not in st.session_state and target_edit_data:
+            # 사이드바 메뉴 이동 후 돌아왔을 때 금액이 0으로 초기화되지 않도록
+            # 위젯 상태가 없으면 저장된 값으로 복원
+            if key_prefix not in st.session_state:
                 st.session_state[key_prefix] = f"{int(row_data['amount']):,}"
 
             def make_on_change_te(k):
@@ -782,9 +919,9 @@ with tab1:
         st.info("등록된 출장 내역이 없습니다.")
 
 # ----------------------------------------------------
-# 탭 2 & 탭 3 (자금팀 / 산정내역서) - 기존 기능 유지
+# 메뉴 2 & 3 (자금팀 / 산정내역서) - 기존 기능 유지
 # ----------------------------------------------------
-with tab2:
+elif menu == MENU_2:
     st.markdown("### 💰 자금팀 제출용 정산 집계표")
     if len(st.session_state.travel_list) > 0:
         processed_df = process_travel_data(st.session_state.travel_list)
@@ -797,10 +934,14 @@ with tab2:
             st.metric(label="총 직원 계좌 입금액", value=f"{processed_df['직원_계좌입금액'].sum():,.0f} 원")
 
         st.dataframe(processed_df[["출장자성명", "부서", "직급", "출장지", "직원_계좌입금액", "여행사_지급액", "총출장비"]], use_container_width=True)
+    else:
+        st.info("등록된 출장 내역이 없습니다. '1. 출장 정보 입력' 메뉴에서 먼저 등록해주세요.")
 
-with tab3:
+elif menu == MENU_3:
     st.markdown("### 📄 해외출장비 산정 내역서")
     if len(st.session_state.travel_list) > 0:
         processed_df = process_travel_data(st.session_state.travel_list)
         selected_person = st.selectbox("출장자 선택", processed_df["출장자성명"].unique())
         st.success(f"[{selected_person}] 님의 해외출장 산정 내역서가 준비되었습니다.")
+    else:
+        st.info("등록된 출장 내역이 없습니다. '1. 출장 정보 입력' 메뉴에서 먼저 등록해주세요.")

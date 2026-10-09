@@ -6,12 +6,13 @@ import os
 import platform
 import sqlite3
 from contextlib import closing
-from copy import copy
+from copy import copy, deepcopy
 import matplotlib
 import matplotlib.pyplot as plt
 import pandas as pd
 from st_aggrid import AgGrid, GridOptionsBuilder, GridUpdateMode, JsCode
 import streamlit as st
+import streamlit.components.v1 as components
 import openpyxl
 from openpyxl.styles import Alignment, PatternFill, Font, Border, Side
 
@@ -271,18 +272,26 @@ st.markdown(
     }
     .stButton > button:focus:not(:active), .stDownloadButton > button:focus:not(:active) { color: #ffffff; border: none; }
 
-    /* 탭 (홈페이지 하단 알약형 메뉴 스타일) */
-    .stTabs [data-baseweb="tab-list"] {
-        gap: 6px; background-color: #ffffff; padding: 8px; border-radius: 14px;
-        border: 1px solid var(--hw-line); box-shadow: 0 4px 16px rgba(0, 0, 0, 0.05);
-        width: fit-content;
+    /* 탭 (사이드바 메뉴 버튼과 같은 스타일 · 항목 간 간격 넓게) */
+    .stTabs [role="tablist"], .stTabs [data-baseweb="tab-list"] {
+        gap: 18px !important; background: transparent !important; padding: 4px 0 10px 0 !important;
+        border: none !important; box-shadow: none !important; width: 100% !important;
     }
-    .stTabs [data-baseweb="tab"] {
-        height: 42px; border-radius: 10px; padding: 0 22px; font-weight: 600;
-        color: #374151; background-color: transparent;
+    .stTabs [data-orientation="horizontal"] { border-bottom: none !important; box-shadow: none !important; }
+    .stTabs [role="tab"], .stTabs [data-baseweb="tab"] {
+        height: auto !important; border-radius: 12px !important; padding: 13px 26px !important;
+        color: var(--hw-text) !important; background-color: transparent !important; border: none !important;
+        box-shadow: none !important; cursor: pointer;
     }
-    .stTabs [aria-selected="true"] { background-color: var(--hw-blue) !important; color: #ffffff !important; }
-    .stTabs [data-baseweb="tab-highlight"], .stTabs [data-baseweb="tab-border"] { display: none; }
+    .stTabs [role="tab"] p, .stTabs [data-baseweb="tab"] p { font-size: 15.5px !important; font-weight: 600 !important; margin: 0 !important; color: inherit !important; }
+    .stTabs [role="tab"]:hover, .stTabs [data-baseweb="tab"]:hover { background-color: var(--hw-gray-bg) !important; }
+    .stTabs [role="tab"][aria-selected="true"], .stTabs [role="tab"][aria-selected="true"]:hover {
+        background-color: var(--hw-blue) !important; color: #ffffff !important;
+    }
+    .stTabs [role="tab"][aria-selected="true"] p { color: #ffffff !important; }
+    .stTabs [data-baseweb="tab-highlight"], .stTabs [data-baseweb="tab-border"], .stTabs .react-aria-SelectionIndicator {
+        display: none !important; height: 0 !important; background: transparent !important;
+    }
 
     /* 체크박스 포인트 컬러 */
     label[data-baseweb="checkbox"] > span:first-child[data-checked="true"],
@@ -337,7 +346,7 @@ SIDEBAR_BRAND_HTML = (
     '<div class="hw-side-logo">'
     + LOGO_SVG
     + "</div>"
-    '<div class="hw-side-desc">해외출장 업무 통합 시스템</div>'
+    '<div class="hw-side-desc">화천기공 해외출장 프로그램</div>'
     "</div>"
 )
 
@@ -425,6 +434,9 @@ if "travel_list" not in st.session_state:
 if "edit_target_index" not in st.session_state:
     st.session_state.edit_target_index = None
 
+st.session_state.setdefault("form_gen", 0)  # 입력 폼 위젯 키 세대 (수정 모드 진입/종료 시 폼 초기화용)
+st.session_state.setdefault("grid_gen", 0)
+
 if "transport_rows" not in st.session_state:
     st.session_state.transport_rows = [
         {"item": "항공권", "amount": 0, "payer": "여행사"},
@@ -439,6 +451,41 @@ if "travel_exp_rows" not in st.session_state:
 
 if "other_rows" not in st.session_state:
     st.session_state.other_rows = [{"item": "", "amount": 0, "payer": "여행사"}]
+
+
+_FORM_KEY_PREFIXES = (
+    "t_item_", "te_item_", "other_item_", "t_amt_str_", "te_amt_str_", "other_amt_str_",
+    "t_payer_", "te_payer_", "other_payer_", "exchange_rate_", "prev_auto_calc_",
+)
+
+
+def apply_form_cmd():
+    """수정 모드 진입('edit', 인덱스) / 종료('reset') 명령을 입력 위젯이 그려지기 전에 처리"""
+    cmd = st.session_state.pop("form_cmd", None)
+    if not cmd:
+        return
+    for k in list(st.session_state.keys()):
+        if isinstance(k, str) and k.startswith(_FORM_KEY_PREFIXES):
+            del st.session_state[k]
+    st.session_state.form_gen += 1
+    if cmd[0] == "edit" and 0 <= cmd[1] < len(st.session_state.travel_list):
+        rec = deepcopy(st.session_state.travel_list[cmd[1]])
+        st.session_state.edit_target_index = cmd[1]
+        st.session_state.transport_rows = rec.get("교통비항목리스트") or [{"item": "", "amount": 0, "payer": "여행사"}]
+        st.session_state.travel_exp_rows = rec.get("출장비항목리스트") or [{"item": "", "amount": 0, "payer": "출장자"}]
+        st.session_state.other_rows = rec.get("기타항목리스트") or [{"item": "", "amount": 0, "payer": "여행사"}]
+        st.session_state.scroll_top = True
+    else:
+        st.session_state.edit_target_index = None
+        st.session_state.transport_rows = [
+            {"item": "항공권", "amount": 0, "payer": "여행사"},
+            {"item": "ESTA", "amount": 0, "payer": "여행사"},
+        ]
+        st.session_state.travel_exp_rows = [
+            {"item": "숙박비", "amount": 0, "payer": "출장자"},
+            {"item": "일당", "amount": 0, "payer": "출장자"},
+        ]
+        st.session_state.other_rows = [{"item": "", "amount": 0, "payer": "여행사"}]
 
 
 def get_position_group(position):
@@ -1093,7 +1140,7 @@ VIEW_COLS = [
     ("start_date", "출장시작일"), ("end_date", "출장종료일"), ("period", "출장기간"),
     ("purpose_cat", "출장목적"), ("purpose_detail", "목적상세"),
     ("emp_amount", "직원_지급액"), ("agency_amount", "여행사_지급액"), ("total_amount", "총지급액"),
-    ("approved_date", "결재승인일"), ("paid_date", "지급일"), ("memo", "비고"),
+    ("memo", "비고"),
 ]
 MONEY_COLS = ["직원_지급액", "여행사_지급액", "총지급액"]
 
@@ -1179,7 +1226,7 @@ def trip_from_calc(rec, approved, paid, memo):
         "emp_amount": int(row["직원_지급액"]),
         "agency_amount": int(row["여행사_지급액"]),
         "total_amount": int(row["총출장비"]),
-        "approved_date": str(approved),
+        "approved_date": str(approved) if approved else "",
         "paid_date": str(paid) if paid else "",
         "memo": memo,
         "items_json": json.dumps(
@@ -1302,7 +1349,7 @@ def render_trip_detail(row):
         "출장자": row["traveler"], "부서": row["dept"], "직급": row["position"], "출장지": row["country"],
         "출장 기간": f'{row["start_date"]} ~ {row["end_date"]} ({int(row["nights"])}박 {int(row["days"])}일)',
         "출장 목적": f'{row["purpose_cat"] or "-"}' + (f' / {row["purpose_detail"]}' if row["purpose_detail"] else ""),
-        "결재승인일": row["approved_date"] or "-", "지급일": row["paid_date"] or "-", "비고": row["memo"] or "-",
+        "비고": row["memo"] or "-",
     }
     if rec:
         info["직급 구분"] = rec.get("직급구분", "-")
@@ -1486,7 +1533,28 @@ def render_manage_search():
     if did is not None and did in set(f["id"].astype(int)):
         st.markdown("---")
         render_trip_detail(f[f["id"] == did].iloc[0])
-        st.button("상세 닫기", key="mg_detail_close", on_click=lambda: st.session_state.update(mg_detail_id=None))
+        bd1, bd2, _bd = st.columns([1, 1, 4])
+        with bd1:
+            st.button("상세 닫기", key="mg_detail_close", use_container_width=True,
+                      on_click=lambda: st.session_state.update(mg_detail_id=None, mg_del_confirm=None))
+        with bd2:
+            if st.button("내역 삭제", key="mg_detail_delete", use_container_width=True):
+                st.session_state.mg_del_confirm = did
+        if st.session_state.get("mg_del_confirm") == did:
+            _r = f[f["id"] == did].iloc[0]
+            st.warning(f"[{_r['traveler']} · {_r['country']} · {_r['start_date']}] 내역을 삭제하면 출장 내역에서 사라지며 복구할 수 없습니다. 삭제할까요?")
+            dc1, dc2, _dd = st.columns([1, 1, 4])
+            with dc1:
+                if st.button("삭제 확인", key="mg_del_yes", type="primary", use_container_width=True):
+                    db_delete(int(did))
+                    st.session_state.mg_detail_id = None
+                    st.session_state.mg_del_confirm = None
+                    st.session_state.mg_flash = f"[{_r['traveler']}] 님의 출장 내역을 삭제했습니다."
+                    st.rerun()
+            with dc2:
+                if st.button("취소", key="mg_del_no", use_container_width=True):
+                    st.session_state.mg_del_confirm = None
+                    st.rerun()
 
     cond = f"{f_from or '전체'} ~ {f_to or '전체'}"
     for label, vals in (("부서", f_dept), ("목적", f_purpose), ("출장자", f_name), ("출장지", f_country)):
@@ -1550,15 +1618,8 @@ def render_manage_register():
             "확정 등록할 출장 건",
             options=pending,
             default=pending,
-            format_func=lambda i: f"{i + 1}. {recs[i]['출장자성명']} ({recs[i]['출장지']}, {recs[i]['출장시작일']})",
+            format_func=lambda i: f"{recs[i]['출장자성명']} ({recs[i]['출장지']}, {recs[i]['출장시작일']} ~ {recs[i]['출장종료일']})",
         )
-        c1, c2, c3 = st.columns([1, 1, 1])
-        with c1:
-            approved = st.date_input("결재 승인일", value=datetime.date.today(), min_value=DATE_MIN, max_value=DATE_MAX, key="mg_reg_approved")
-        with c2:
-            use_paid = st.checkbox("지급일 입력", value=False, key="mg_reg_use_paid")
-        with c3:
-            paid = st.date_input("지급일", value=datetime.date.today(), min_value=DATE_MIN, max_value=DATE_MAX, key="mg_reg_paid", disabled=not use_paid)
         memo = st.text_input("비고 (선택)", key="mg_reg_memo")
 
         reg_clicked = st.button("선택한 출장 건 확정 등록", use_container_width=True, key="mg_reg_btn")
@@ -1571,7 +1632,7 @@ def render_manage_register():
                 if db_exists(r["출장자성명"], r["출장시작일"], r["출장종료일"], r["출장지"]):
                     skipped += 1
                     continue
-                db_insert(trip_from_calc(r, approved, paid if use_paid else None, memo))
+                db_insert(trip_from_calc(r, None, None, memo))
                 ok += 1
             msg = f"{ok}건을 확정 등록했습니다."
             if skipped:
@@ -1605,13 +1666,7 @@ def render_manage_register():
                 m_emp = _money_input("직원 지급액(원)")
             with d2:
                 m_agency = _money_input("여행사 지급액(원)")
-            e1, e2 = st.columns(2)
-            with e1:
-                m_approved = st.date_input("결재 승인일", value=datetime.date.today(), min_value=DATE_MIN, max_value=DATE_MAX)
-            with e2:
-                m_memo = st.text_input("비고")
-            m_use_paid = st.checkbox("지급일 입력")
-            m_paid = st.date_input("지급일", value=datetime.date.today(), min_value=DATE_MIN, max_value=DATE_MAX)
+            m_memo = st.text_input("비고")
             submitted = st.form_submit_button("직접 등록")
 
         if submitted:
@@ -1630,7 +1685,7 @@ def render_manage_register():
                         "nights": max(days - 1, 0), "days": days,
                         "purpose_cat": m_pcat, "purpose_detail": m_pdetail,
                         "emp_amount": int(m_emp), "agency_amount": int(m_agency), "total_amount": int(m_emp) + int(m_agency),
-                        "approved_date": str(m_approved), "paid_date": str(m_paid) if m_use_paid else "",
+                        "approved_date": "", "paid_date": "",
                         "memo": m_memo, "items_json": "",
                     }
                 )
@@ -1716,14 +1771,15 @@ def render_home():
         '<div class="hw-hero">'
         '<div class="hw-hero-eyebrow">HWACHEON OVERSEAS BUSINESS TRIP</div>'
         '<div class="hw-hero-title">해외출장 업무 통합 시스템</div>'
-               "</div>",
+        '<div class="hw-hero-sub">출장비 산정부터 자금팀 정산 자료 생성, 확정된 출장 내역의 기록·검색까지<br>한 곳에서 처리합니다.</div>'
+        "</div>",
         unsafe_allow_html=True,
     )
 
     left, right = st.columns(2, gap="large")
     with left:
         st.markdown(
-            _prog_card(ICON_CALC, "해외출장비 계산", "출장비를 산정하고, 자금팀 자료와 산정 내역서를 생성합니다."),
+            _prog_card(ICON_CALC, "해외출장비 계산", "출장 정보를 입력해 출장비를 산정하고, 자금팀 자료와 산정 내역서를 엑셀로 생성합니다."),
             unsafe_allow_html=True,
         )
         st.button("실행하기", key="home_calc_btn", use_container_width=True, on_click=_go, args=("calc",))
@@ -1747,10 +1803,24 @@ def render_footer():
 # 4. 페이지 구성 (사이드바 메뉴 선택에 따라 표시)
 # ----------------------------------------------------
 if menu == MENU_1:
+    apply_form_cmd()
+    G = st.session_state.form_gen
     st.markdown("### 출장 기본 정보 입력")
-    if st.session_state.edit_target_index is not None:
+    _cf = st.session_state.pop("mg_calc_flash", None)
+    if _cf:
+        st.success(_cf)
+    if st.session_state.pop("scroll_top", False):
+        # 수정 모드 진입 시 입력란이 있는 화면 맨 위로 이동
+        components.html(
+            "<script>var m = window.parent.document.querySelector('[data-testid=\"stMain\"]');"
+            " if (m) { m.scrollTo({top: 0, behavior: 'smooth'}); }</script>",
+            height=0,
+        )
+    if st.session_state.edit_target_index is not None and st.session_state.edit_target_index < len(st.session_state.travel_list):
+        _er = st.session_state.travel_list[st.session_state.edit_target_index]
         st.info(
-            f"현재 **[인덱스 {st.session_state.edit_target_index}]** 번 출장 내역 수정 중입니다."
+            f"현재 **{st.session_state.edit_target_index + 1}번 · {_er['출장자성명']} ({_er['출장지']})** 출장 내역을 수정 중입니다. "
+            "수정 후 맨 아래 '수정 사항 반영하기'를 눌러 주세요."
         )
 
     target_edit_data = None
@@ -1769,7 +1839,7 @@ if menu == MENU_1:
         default_name = (
             target_edit_data["출장자성명"] if target_edit_data else ""
         )
-        name = st.text_input("출장자 성명", value=default_name)
+        name = st.text_input("출장자 성명", value=default_name, key=f"f_name_{G}")
 
         default_dept = target_edit_data["부서"] if target_edit_data else "인사지원팀"
         dept_idx = (
@@ -1777,7 +1847,7 @@ if menu == MENU_1:
             if default_dept in department_list
             else 0
         )
-        department = st.selectbox("부서", department_list, index=dept_idx)
+        department = st.selectbox("부서", department_list, index=dept_idx, key=f"f_dept_{G}")
 
         position_list = POSITION_LIST
         default_pos = target_edit_data["직급"] if target_edit_data else "사원"
@@ -1786,12 +1856,12 @@ if menu == MENU_1:
             if default_pos in position_list
             else 10
         )
-        position = st.selectbox("직급", position_list, index=pos_idx)
+        position = st.selectbox("직급", position_list, index=pos_idx, key=f"f_pos_{G}")
 
         auto_pos_group = get_position_group(position)
         pos_group_options = ["임원(부사장이상)", "임원", "1급", "2급", "3급이하"]
 
-        if target_edit_data and "loaded_edit_idx" not in st.session_state:
+        if target_edit_data and position == target_edit_data.get("직급"):
             default_pos_group = target_edit_data.get("직급구분", auto_pos_group)
         else:
             default_pos_group = auto_pos_group
@@ -1802,7 +1872,7 @@ if menu == MENU_1:
             else 4
         )
         position_group = st.selectbox(
-            "직급 구분", pos_group_options, index=default_pos_idx
+            "직급 구분", pos_group_options, index=default_pos_idx, key=f"f_pg_{G}_{position}"
         )
 
     with col_b:
@@ -1817,16 +1887,16 @@ if menu == MENU_1:
             else default_start + datetime.timedelta(days=7)
         )
 
-        start_date = st.date_input("출장 시작일", value=default_start)
-        end_date = st.date_input("출장 종료일", value=default_end)
+        start_date = st.date_input("출장 시작일", value=default_start, key=f"f_sd_{G}")
+        end_date = st.date_input("출장 종료일", value=default_end, key=f"f_ed_{G}")
 
         default_country = target_edit_data["출장지"] if target_edit_data else ""
-        country = st.text_input("출장지", value=default_country)
+        country = st.text_input("출장지", value=default_country, key=f"f_cty_{G}")
 
         auto_region = get_region_group(country) if country else "갑"
         region_options = ["갑", "을", "병", "특"]
 
-        if target_edit_data and "loaded_edit_idx" not in st.session_state:
+        if target_edit_data and country == target_edit_data.get("출장지"):
             default_region = target_edit_data.get("지역구분", auto_region)
         else:
             default_region = auto_region
@@ -1837,7 +1907,7 @@ if menu == MENU_1:
             else 0
         )
         region_group = st.selectbox(
-            "지역 구분", region_options, index=default_reg_idx
+            "지역 구분", region_options, index=default_reg_idx, key=f"f_rg_{G}_{auto_region}"
         )
 
     # ------------------------------------------------
@@ -1875,7 +1945,7 @@ if menu == MENU_1:
             value=float(default_exchange_rate),
             step=1.0,
             format="%.2f",
-            key=rate_key,
+            key=f"{rate_key}_{G}",
         )
 
     # 출장 목적 (확정 등록 및 해외출장 내역관리 검색에 사용)
@@ -1886,11 +1956,13 @@ if menu == MENU_1:
             "출장 목적 구분",
             PURPOSE_OPTIONS,
             index=PURPOSE_OPTIONS.index(_default_pc) if _default_pc in PURPOSE_OPTIONS else 0,
+            key=f"f_pc_{G}",
         )
     with col_p2:
         purpose_detail = st.text_input(
             "출장 목적 상세",
             value=(target_edit_data.get("출장목적상세", "") if target_edit_data else ""),
+            key=f"f_pd_{G}",
         )
 
     raw_days = (end_date - start_date).days + 1
@@ -1899,7 +1971,11 @@ if menu == MENU_1:
 
     col_opt1, col_opt2 = st.columns([1, 2])
     with col_opt1:
-        is_flight_minus = st.checkbox("기내 박 적용(숙박 1박 차감)", value=False)
+        _fm_default = bool(
+            target_edit_data
+            and max(int(target_edit_data.get("출장일수", 1)) - 1, 0) - int(target_edit_data.get("출장박수", 0)) >= 1
+        )
+        is_flight_minus = st.checkbox("기내 박 적용(숙박 1박 차감)", value=_fm_default, key=f"f_fm_{G}")
     with col_opt2:
         calculated_days = raw_days
         calculated_nights = calculated_days - 1 if calculated_days > 1 else 0
@@ -1907,18 +1983,6 @@ if menu == MENU_1:
             calculated_nights = max(0, calculated_nights - 1)
 
         st.info(f"최종 산정된 출장 기간: **{calculated_nights}박 {calculated_days}일**")
-
-    if target_edit_data and "loaded_edit_idx" not in st.session_state:
-        st.session_state.transport_rows = target_edit_data.get(
-            "교통비항목리스트", st.session_state.transport_rows
-        )
-        st.session_state.travel_exp_rows = target_edit_data.get(
-            "출장비항목리스트", st.session_state.travel_exp_rows
-        )
-        st.session_state.other_rows = target_edit_data.get(
-            "기타항목리스트", st.session_state.other_rows
-        )
-        st.session_state.loaded_edit_idx = st.session_state.edit_target_index
 
     std_daily, std_hotel = get_standard_rates(region_group, position_group)
     applied_rate = (
@@ -2142,11 +2206,11 @@ if menu == MENU_1:
 
             if st.session_state.edit_target_index is not None:
                 st.session_state.travel_list[st.session_state.edit_target_index] = new_data
-                st.success(f"[{name}] 님의 내역이 수정되었습니다.")
-                st.session_state.edit_target_index = None
+                st.session_state.mg_calc_flash = f"[{name}] 님의 내역이 수정되었습니다."
+                st.session_state.form_cmd = ("reset",)
             else:
                 st.session_state.travel_list.append(new_data)
-                st.success(f"[{name}] 님의 내역이 등록되었습니다.")
+                st.session_state.mg_calc_flash = f"[{name}] 님의 내역이 등록되었습니다."
             st.rerun()
 
     st.markdown("---")
@@ -2158,7 +2222,7 @@ if menu == MENU_1:
         display_df.insert(0, "순번", range(1, len(display_df) + 1))
 
         gb = GridOptionsBuilder.from_dataframe(display_df)
-        gb.configure_selection(selection_mode="single", use_checkbox=False)
+        gb.configure_selection(selection_mode="single", use_checkbox=False, suppressRowClickSelection=True)
         # 열 폭이 좁아 값이 잘리지 않도록 최소 폭 지정(넘치면 가로 스크롤)
         gb.configure_default_column(minWidth=110, resizable=True)
         gb.configure_column("순번", minWidth=90, maxWidth=100)
@@ -2171,27 +2235,36 @@ if menu == MENU_1:
         if num_cols:
             gb.configure_columns(num_cols, valueFormatter=num_fmt, cellStyle={"textAlign": "right"}, minWidth=130)
         grid_options = gb.build()
+        # 행을 더블클릭하면 해당 출장 내역을 입력란으로 불러와 수정
+        grid_options["onRowDoubleClicked"] = JsCode("function(e){ e.api.deselectAll(); e.node.setSelected(true); }")
 
+        st.caption("내역을 더블클릭하면 해당 출장 내역을 위쪽 입력란으로 불러와 수정할 수 있습니다.")
         grid_response = AgGrid(
             display_df,
             gridOptions=grid_options,
-            update_mode=GridUpdateMode.MODEL_CHANGED,
+            update_mode=GridUpdateMode.SELECTION_CHANGED,
             fit_columns_on_grid_load=True,
             height=250,
             theme="alpine",
             allow_unsafe_jscode=True,
+            key=f"calc_grid_{st.session_state.grid_gen}",
         )
+        _picked = _selected_rows(grid_response.get("selected_rows") if hasattr(grid_response, "get") else grid_response["selected_rows"])
+        if _picked:
+            st.session_state.form_cmd = ("edit", int(_picked[0]["순번"]) - 1)
+            st.session_state.grid_gen += 1  # 그리드 선택 상태 초기화
+            st.rerun()
 
         col_del1, col_del2 = st.columns([1, 1])
         with col_del1:
             if st.session_state.edit_target_index is not None:
                 if st.button("수정 모드 취소"):
-                    st.session_state.edit_target_index = None
+                    st.session_state.form_cmd = ("reset",)
                     st.rerun()
         with col_del2:
             if st.button("전체 데이터 초기화"):
                 st.session_state.travel_list = []
-                st.session_state.edit_target_index = None
+                st.session_state.form_cmd = ("reset",)
                 st.rerun()
     else:
         st.info("등록된 출장 내역이 없습니다.")
@@ -2208,7 +2281,7 @@ elif menu == MENU_2:
             "자료를 생성할 출장 내역 선택",
             options=list(range(len(_recs_all))),
             default=list(range(len(_recs_all))),
-            format_func=lambda i: f"{i + 1}. {_recs_all[i]['출장자성명']} ({_recs_all[i]['출장지']}, {_recs_all[i]['출장시작일']} ~ {_recs_all[i]['출장종료일']})",
+            format_func=lambda i: f"{_recs_all[i]['출장자성명']} ({_recs_all[i]['출장지']}, {_recs_all[i]['출장시작일']} ~ {_recs_all[i]['출장종료일']})",
             key=f"fund_sel_{len(_recs_all)}",
             placeholder=" ",
         )

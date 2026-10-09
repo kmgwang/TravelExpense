@@ -381,13 +381,6 @@ with tab1:
             f"✏️ 현재 **[인덱스 {st.session_state.edit_target_index}]** 번 출장 내역 수정 중입니다."
         )
 
-    col_rate_info, col_rate_input = st.columns([2, 2])
-    with col_rate_info:
-        st.markdown(
-            "🔗 [서울외국환중개 환율 조회 링크](http://www.smbs.biz/ExRate/TodayExRate.jsp)"
-        )
-        st.caption("🌐 위 링크를 클릭하여 조회한 환율을 우측 칸에 직접 입력해주세요.")
-
     target_edit_data = None
     if st.session_state.edit_target_index is not None and len(
         st.session_state.travel_list
@@ -395,19 +388,6 @@ with tab1:
         target_edit_data = st.session_state.travel_list[
             st.session_state.edit_target_index
         ]
-
-    default_exchange_rate = (
-        target_edit_data["환율"] if target_edit_data else 1345.30
-    )
-
-    with col_rate_input:
-        exchange_rate = st.number_input(
-            "적용 환율 입력",
-            min_value=0.0,
-            value=float(default_exchange_rate),
-            step=1.0,
-            format="%.2f",
-        )
 
     department_list = [
         "임원", "경영지원본부", "경영지원실", "인사지원팀", "관리팀", "재무전략실",
@@ -498,6 +478,36 @@ with tab1:
         )
         region_group = st.selectbox(
             "지역 구분", region_options, index=default_reg_idx
+        )
+
+    # ----------------------------------------------------
+    # 직급 구분 및 지역 구분 아래에 환율 조회 링크 및 입력 칸배치
+    # ----------------------------------------------------
+    col_rate_info, col_rate_input = st.columns([2, 2])
+    with col_rate_info:
+        st.markdown(
+            "🔗 [서울외국환중개 환율 조회 링크](http://www.smbs.biz/ExRate/TodayExRate.jsp)"
+        )
+        st.caption("🌐 위 링크를 클릭하여 조회한 환율을 우측 칸에 직접 입력해주세요.")
+
+    if region_group == "특":
+        rate_label = "적용 환율 입력 (엔화 - 100엔 기준)"
+        default_rate_val = 900.00
+    else:
+        rate_label = "적용 환율 입력 (달러 - 1달러 기준)"
+        default_rate_val = 1345.30
+
+    default_exchange_rate = (
+        target_edit_data["환율"] if target_edit_data else default_rate_val
+    )
+
+    with col_rate_input:
+        exchange_rate = st.number_input(
+            rate_label,
+            min_value=0.0,
+            value=float(default_exchange_rate),
+            step=1.0,
+            format="%.2f",
         )
 
     raw_days = (end_date - start_date).days + 1

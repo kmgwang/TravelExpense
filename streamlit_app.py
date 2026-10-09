@@ -173,7 +173,7 @@ st.markdown(
         <div class="hwacheon-brand">
             <div>
                 <div class="hwacheon-logo-text">HWACHEON</div>
-                <div class="hwacheon-subtitle">화천기공 해외출장 경비 산정 & 자금팀 정산 자동화 시스템</div>
+                <div class="hwacheon-subtitle">화천기공 해외출장비 프로그램</div>
             </div>
         </div>
     </div>

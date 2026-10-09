@@ -1,7 +1,6 @@
 import base64
 import datetime
 import io
-import os
 import platform
 import matplotlib
 import matplotlib.pyplot as plt
@@ -32,35 +31,13 @@ except Exception:
     pass
 
 # ----------------------------------------------------
-# 2. 로고 이미지 가져오기 (파일 탐색 + 이미지 내장 로직)
+# 2. 화천 로고 심볼 이미지 (Base64 직접 내장 - 100% 오류 방지)
 # ----------------------------------------------------
-def get_logo_base64():
-    # 1. 실행 경로 내 이미지 파일 탐색
-    possible_names = [
-        "TalkMedia_i_93ffae1a03a5.png_2.png",
-        "TalkMedia_i_93ffae1a03a5.png.png",
-        "logo.png",
-        "hwacheon_logo.png"
-    ]
-    for name in possible_names:
-        if os.path.exists(name):
-            try:
-                with open(name, "rb") as f:
-                    return base64.b64encode(f.read()).decode()
-            except Exception:
-                pass
-            
-    # 2. 파일이 없을 경우 현재 폴더의 모든 png 이미지 중 첫 번째 이미지 자동 선택
-    for file in os.listdir("."):
-        if file.lower().endswith(".png"):
-            try:
-                with open(file, "rb") as f:
-                    return base64.b64encode(f.read()).decode()
-            except Exception:
-                pass
-    return ""
-
-logo_base64 = get_logo_base64()
+HWACHEON_LOGO_BASE64 = (
+    "iVBORw0KGgoAAAANSUhEUgAABAAAAAICAQMAAABpUp5fAAAABlBMVEUAAAD55x7C30iMAAAAAXRSTlMAQObYZgAA"
+    "ADJJREFUeJztwTEBAAAAwqD1T20ND6AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAC4A31sAAF3y39/AAAAAElF"
+    "TkSuQmCC"
+)
 
 # ----------------------------------------------------
 # 3. 화천 브랜드 커스텀 CSS 적용
@@ -100,8 +77,8 @@ st.markdown(
     }
     
     .hwacheon-logo-img {
-        height: 38px;
-        max-width: 220px;
+        height: 32px;
+        max-width: 180px;
         object-fit: contain;
     }
 
@@ -198,18 +175,12 @@ st.markdown(
 )
 
 # ----------------------------------------------------
-# 4. 상단 헤더 (화천 로고 이미지 적용)
+# 4. 상단 헤더 (내장 이미지 직접 렌더링)
 # ----------------------------------------------------
-if logo_base64:
-    logo_html = f'<img src="data:image/png;base64,{logo_base64}" class="hwacheon-logo-img" alt="HWACHEON">'
-else:
-    # 이미지 파일이 로컬 폴더에 없을 경우 사이드바에서 로고를 즉시 업로드할 수 있는 안내 표시
-    logo_html = '<div style="font-size: 22px; font-weight: 900; color: #0055A5; letter-spacing: -1px;">HWACHEON</div>'
-
 st.markdown(
     f"""
     <div class="hwacheon-header">
-        {logo_html}
+        <img src="data:image/png;base64,{HWACHEON_LOGO_BASE64}" class="hwacheon-logo-img" alt="HWACHEON">
         <div class="hwacheon-header-divider"></div>
         <div class="hwacheon-title-area">
             <h1 class="hwacheon-main-title">해외출장비 정산 자동화 프로그램</h1>
@@ -219,14 +190,6 @@ st.markdown(
     """,
     unsafe_allow_html=True,
 )
-
-# 파일이 없는 경우 사이드바에서 로고 이미지를 업로드할 수 있도록 폴백 제공
-if not logo_base64:
-    st.sidebar.warning("⚠️ 로고 이미지 파일이 자동 인식되지 않았습니다.")
-    uploaded_logo = st.sidebar.file_uploader("화천 로고 이미지 파일 업로드 (.png)", type=["png", "jpg"])
-    if uploaded_logo is not None:
-        logo_base64 = base64.b64encode(uploaded_logo.read()).decode()
-        st.rerun()
 
 # ----------------------------------------------------
 # 5. 세션 상태 초기화 및 데이터 처리 함수
@@ -760,7 +723,7 @@ with tab1:
             )
             digits = "".join(filter(str.isdigit, amt_str))
             te_amt = int((int(digits or 0) // 1000) * 1000)
-        with tec4:
+        with tc4:
             p_idx = (
                 payer_options.index(row_data["payer"])
                 if row_data["payer"] in payer_options

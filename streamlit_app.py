@@ -308,7 +308,7 @@ SIDEBAR_BRAND_HTML = (
     + LOGO_SVG
     + '<div class="hw-side-logo-text">HWACHEON</div>'
     "</div>"
-    '<div class="hw-side-desc">화천기공 해외출장비 산정 시스템</div>'
+    '<div class="hw-side-desc">화천기공 해외출장 경비 산정 &amp; 자금팀 정산 자동화 시스템</div>'
     "</div>"
     '<div class="hw-side-caption">MENU</div>'
 )
@@ -686,17 +686,17 @@ TEMPLATE_B64 = (
     "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"
-    "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"
+    "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"
@@ -732,87 +732,95 @@ TEMPLATE_B64 = (
     "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"
-    "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"
+    "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"
-    "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"
+    "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"
-    "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"
+    "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"
+    "bWxQSwUGAAAAAAwADAAmAwAA6CwAAAAA"
 )
 
 
@@ -823,8 +831,32 @@ def load_statement_template():
     return openpyxl.load_workbook(io.BytesIO(base64.b64decode(TEMPLATE_B64)))
 
 
+def _find_cell(ws, text, startswith=False, min_row=1, max_row=None, col=None):
+    """시트에서 텍스트가 일치하는 첫 셀을 찾는다"""
+    for row in ws.iter_rows(min_row=min_row, max_row=max_row):
+        for c in row:
+            if c.value is None or (col is not None and c.column != col):
+                continue
+            v = str(c.value).strip()
+            if (v.startswith(text) if startswith else v == text):
+                return c
+    return None
+
+
+def _put(ws, row, col, value, number_format=None):
+    """셀에 값을 입력 (병합된 셀의 비대표 칸이면 건너뜀)"""
+    cell = ws.cell(row=row, column=col)
+    try:
+        cell.value = value
+    except AttributeError:
+        return
+    if number_format:
+        cell.number_format = number_format
+
+
 def fill_statement_sheet(ws, rec):
-    """양식 시트에 출장자 정보와 입력한 금액을 채워 넣는다 (양식의 서식/병합은 그대로 유지)"""
+    """양식 시트에 출장자 정보와 입력한 금액을 채워 넣는다 (양식의 서식/병합은 그대로 유지)
+    - 양식의 라벨('소속', '성명', '숙박비' 등) 위치를 찾아 입력하므로 양식의 행/열이 이동해도 동작합니다."""
     items, std_daily, std_hotel, cur = calc_item_rows(rec)
     jpy = rec["지역구분"] == "특"
     days = rec["출장일수"]
@@ -833,39 +865,64 @@ def fill_statement_sheet(ws, rec):
     daily_amt = sum(a for cat, n, a, p in items if cat == "출장비" and "일당" in n)
     unit = "(100엔 기준)" if jpy else ""
 
-    # 출장자 정보
-    ws["B2"] = rec["부서"]
-    ws["D2"] = rec["출장자성명"]
-    ws["F2"] = rec["직급"]
-    ws["B3"] = rec["출장지"]
-    ws["D3"] = rec["지역구분"]
-    ws["F3"] = rec["직급구분"]
-    ws["B4"] = datetime.date.fromisoformat(rec["출장시작일"])
-    ws["D4"] = datetime.date.fromisoformat(rec["출장종료일"])
-    ws["B4"].number_format = "yyyy-mm-dd"
-    ws["D4"].number_format = "yyyy-mm-dd"
-    ws["F4"] = f"{nights}박 {days}일"
+    # 1) 출장자 정보: 라벨 오른쪽 칸에 입력 ('■ 적용 출장비 산정 기준' 윗부분에서만 탐색)
+    sec = _find_cell(ws, "■ 적용 출장비 산정 기준")
+    info_max = sec.row - 1 if sec else 10
+    info = {
+        "소속": rec["부서"],
+        "성명": rec["출장자성명"],
+        "직급": rec["직급"],
+        "출장지": rec["출장지"],
+        "지역구분": rec["지역구분"],
+        "직급구분": rec["직급구분"],
+        "출발일": datetime.date.fromisoformat(rec["출장시작일"]),
+        "도착일": datetime.date.fromisoformat(rec["출장종료일"]),
+        "출장기간": f"{nights}박 {days}일",
+    }
+    for label, value in info.items():
+        c = _find_cell(ws, label, max_row=info_max)
+        if c is not None:
+            _put(ws, c.row, c.column + 1, value, "yyyy-mm-dd" if isinstance(value, datetime.date) else None)
 
-    # 적용 출장비 산정 기준 (금액은 1번 메뉴에서 입력한 값)
-    if std_hotel == "실비":
-        ws["B8"] = "실비"
-        ws["E8"] = "실비 정산"
-    else:
-        ws["B8"] = f"{std_hotel:,}{cur} / 박"
-        ws["E8"] = f"{std_hotel:,} {cur} * {nights}박 x 환율{unit}"
-    ws["C8"] = f"{nights}박"
-    ws["D8"] = hotel_amt
+    # 2) 적용 출장비 산정 기준 표
+    hdr = _find_cell(ws, "기간 적용")
+    if hdr is not None:
+        cols = {str(c.value).strip(): c.column for c in ws[hdr.row] if c.value is not None}
+        c_label = cols.get("구분", 1)
+        c_basis = cols.get("산정 기준")
+        c_period = cols.get("기간 적용")
+        c_amt = cols.get("금액")
+        c_calc = cols.get("원화 환산 산식")
+        r_hotel = _find_cell(ws, "숙박비", min_row=hdr.row + 1, col=c_label)
+        r_daily = _find_cell(ws, "일당", min_row=hdr.row + 1, col=c_label)
+        r_total = _find_cell(ws, "지급 총액", min_row=hdr.row + 1, col=c_label)
 
-    ws["B9"] = f"{std_daily:,}{cur} / 일"
-    ws["C9"] = f"{days}일"
-    ws["D9"] = daily_amt
-    ws["E9"] = f"{std_daily:,} {cur} * {days}일 x 환율{unit}"
+        if r_hotel is not None:
+            r = r_hotel.row
+            if std_hotel == "실비":
+                basis, calc = "실비", "실비 정산"
+            else:
+                basis, calc = f"{std_hotel:,}{cur} / 박", f"{std_hotel:,} {cur} * {nights}박 x 환율{unit}"
+            if c_basis: _put(ws, r, c_basis, basis)
+            if c_period: _put(ws, r, c_period, f"{nights}박")
+            if c_amt: _put(ws, r, c_amt, hotel_amt, "#,##0")
+            if c_calc: _put(ws, r, c_calc, calc)
 
-    ws["D10"] = "=D8+D9"
-    for cell in ("D8", "D9", "D10"):
-        ws[cell].number_format = "#,##0"
+        if r_daily is not None:
+            r = r_daily.row
+            if c_basis: _put(ws, r, c_basis, f"{std_daily:,}{cur} / 일")
+            if c_period: _put(ws, r, c_period, f"{days}일")
+            if c_amt: _put(ws, r, c_amt, daily_amt, "#,##0")
+            if c_calc: _put(ws, r, c_calc, f"{std_daily:,} {cur} * {days}일 x 환율{unit}")
 
-    ws["A37"] = f"신청일 : {datetime.date.today():%Y년 %m월 %d일}"
+        if r_total is not None and c_amt and r_hotel is not None and r_daily is not None:
+            L = get_column_letter(c_amt)
+            _put(ws, r_total.row, c_amt, f"={L}{r_hotel.row}+{L}{r_daily.row}", "#,##0")
+
+    # 3) 신청일
+    d = _find_cell(ws, "신청일", startswith=True)
+    if d is not None:
+        d.value = f"신청일 : {datetime.date.today():%Y년 %m월 %d일}"
 
 
 def build_statement_excel(records, indices):
@@ -1115,6 +1172,8 @@ if menu == MENU_1:
     st.markdown("---")
     payer_options = ["여행사", "출장자", "직접입력"]
 
+    payer_sfx = name.strip()  # 성명이 바뀌면 지급처 위젯 key가 바뀌어 즉시 새로 그려짐
+
     def payer_fmt(v):
         # 저장값은 '출장자'로 유지하고, 화면에는 입력한 출장자 성명을 표시
         return (name.strip() or "출장자") if v == "출장자" else v
@@ -1144,7 +1203,7 @@ if menu == MENU_1:
             t_amt = int((int(digits or 0) // 1000) * 1000)
         with tc4:
             p_idx = payer_options.index(row_data["payer"]) if row_data["payer"] in payer_options else 0
-            t_payer = st.selectbox(f"교통비 지급처 {idx}", payer_options, index=p_idx, key=f"t_payer_{idx}", format_func=payer_fmt, label_visibility="collapsed")
+            t_payer = st.selectbox(f"교통비 지급처 {idx}", payer_options, index=p_idx, key=f"t_payer_{idx}_{payer_sfx}", format_func=payer_fmt, label_visibility="collapsed")
 
         transport_sum += t_amt
         updated_transport_rows.append({"item": t_name, "amount": t_amt, "payer": t_payer})
@@ -1186,7 +1245,7 @@ if menu == MENU_1:
             te_amt = int((int(digits or 0) // 1000) * 1000)
         with tec4:
             p_idx = payer_options.index(row_data["payer"]) if row_data["payer"] in payer_options else 1
-            te_payer = st.selectbox(f"출장비 지급처 {idx}", payer_options, index=p_idx, key=f"te_payer_{idx}", format_func=payer_fmt, label_visibility="collapsed")
+            te_payer = st.selectbox(f"출장비 지급처 {idx}", payer_options, index=p_idx, key=f"te_payer_{idx}_{payer_sfx}", format_func=payer_fmt, label_visibility="collapsed")
 
         travel_exp_sum += te_amt
         updated_travel_exp_rows.append({"item": te_name, "amount": te_amt, "payer": te_payer})
@@ -1226,7 +1285,7 @@ if menu == MENU_1:
             it_amt = int((int(digits or 0) // 1000) * 1000)
         with oc4:
             p_idx = payer_options.index(row_data["payer"]) if row_data["payer"] in payer_options else 0
-            it_payer = st.selectbox(f"기타 지급처 {idx}", payer_options, index=p_idx, key=f"other_payer_{idx}", format_func=payer_fmt, label_visibility="collapsed")
+            it_payer = st.selectbox(f"기타 지급처 {idx}", payer_options, index=p_idx, key=f"other_payer_{idx}_{payer_sfx}", format_func=payer_fmt, label_visibility="collapsed")
 
         other_sum += it_amt
         updated_other_rows.append({"item": it_name, "amount": it_amt, "payer": it_payer})

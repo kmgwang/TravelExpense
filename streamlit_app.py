@@ -308,7 +308,7 @@ SIDEBAR_BRAND_HTML = (
     + LOGO_SVG
     + '<div class="hw-side-logo-text">HWACHEON</div>'
     "</div>"
-    '<div class="hw-side-desc">화천기공 해외출장 경비 산정 &amp; 자금팀 정산 자동화 시스템</div>'
+    '<div class="hw-side-desc">화천기공 해외출장비 산정 시스템</div>'
     "</div>"
     '<div class="hw-side-caption">MENU</div>'
 )

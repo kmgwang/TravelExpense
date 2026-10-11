@@ -1771,7 +1771,7 @@ def render_home():
         '<div class="hw-hero">'
         '<div class="hw-hero-eyebrow">HWACHEON OVERSEAS BUSINESS TRIP</div>'
         '<div class="hw-hero-title">해외출장 업무 통합 시스템</div>'
-        '<div class="hw-hero-sub">출장비 산정부터 자금팀 정산 자료 생성, <br>출장 내역의 관리까지 한 곳에서 처리합니다.</div>'
+        '<div class="hw-hero-sub">출장비 산정부터 자금팀 정산 자료 생성, 출장 내역의 관리까지 한 곳에서 처리합니다.</div>'
         "</div>",
         unsafe_allow_html=True,
     )

@@ -1779,7 +1779,7 @@ def render_home():
     left, right = st.columns(2, gap="large")
     with left:
         st.markdown(
-            _prog_card(ICON_CALC, "해외출장비 계산", "출장 정보를 입력해 출장비를 산정하고, 자금팀 자료와 산정 내역서를 엑셀로 생성합니다."),
+            _prog_card(ICON_CALC, "해외출장비 계산", "출장 정보를 입력해 출장비를 산정하고, 필요 자료를 엑셀로 생성합니다."),
             unsafe_allow_html=True,
         )
         st.button("실행하기", key="home_calc_btn", use_container_width=True, on_click=_go, args=("calc",))
